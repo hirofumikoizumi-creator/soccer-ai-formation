@@ -27,6 +27,11 @@ jobs:
       - name: Install EAS CLI
         run: npm install -g eas-cli
 
+      - name: Verify EAS Configuration
+        run: |
+          cat app.json | grep -A 3 '"eas"'
+          cat eas.json | head -5
+
       - name: Create .env file
         run: |
           cat > .env << EOF
