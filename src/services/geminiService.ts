@@ -22,7 +22,11 @@ export interface PredictionResult {
 }
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const GEMINI_MODELS = [
+  process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash',
+  'gemini-2.0-flash',
+];
+const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 function assertGeminiApiKey() {
   if (!GEMINI_API_KEY) {
@@ -55,6 +59,31 @@ function normalizePlayers(players: unknown): string[] {
     .filter(Boolean);
 }
 
+async function postGeminiGenerateContent(payload: unknown) {
+  let lastError: unknown = null;
+  const models = Array.from(new Set(GEMINI_MODELS.filter(Boolean)));
+
+  for (const model of models) {
+    try {
+      return await axios.post(
+        `${GEMINI_API_BASE_URL}/${model}:generateContent?key=${GEMINI_API_KEY}`,
+        payload,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          timeout: 60000,
+        }
+      );
+    } catch (error) {
+      lastError = error;
+      console.error(`Gemini request failed with model ${model}:`, error);
+    }
+  }
+
+  throw lastError;
+}
+
 export async function analyzeFormationImage(
   imageBase64: string,
   teamType: 'home' | 'away',
@@ -82,36 +111,27 @@ Return ONLY valid JSON in this exact format:
 If the image is low resolution, still infer the formation from positions and return any readable player names.
 Do not include markdown, comments, or explanatory text.`;
 
-    const response = await axios.post(
-      `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
-      {
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt,
+    const response = await postGeminiGenerateContent({
+      contents: [
+        {
+          parts: [
+            {
+              text: prompt,
+            },
+            {
+              inline_data: {
+                mime_type: mimeType,
+                data: imageBase64,
               },
-              {
-                inlineData: {
-                  mimeType,
-                  data: imageBase64,
-                },
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.1,
+            },
+          ],
         },
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        temperature: 0.1,
       },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        timeout: 60000,
-      }
-    );
+    });
 
     const content = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!content) {
@@ -163,30 +183,21 @@ Provide a detailed analysis and prediction. Return ONLY valid JSON in this exact
 
 Important: The three probabilities MUST sum to 100. Do not include any other text or markdown.`;
 
-    const response = await axios.post(
-      `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
-      {
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.2,
+    const response = await postGeminiGenerateContent({
+      contents: [
+        {
+          parts: [
+            {
+              text: prompt,
+            },
+          ],
         },
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        temperature: 0.2,
       },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        timeout: 60000,
-      }
-    );
+    });
 
     const content = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!content) {

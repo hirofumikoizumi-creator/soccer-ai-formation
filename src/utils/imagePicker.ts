@@ -1,5 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { Alert, Linking } from 'react-native';
 
 export interface PickedImage {
@@ -9,16 +10,37 @@ export interface PickedImage {
 }
 
 async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<PickedImage> {
+  const maxDimension = Math.max(asset.width || 0, asset.height || 0);
+  const resize =
+    maxDimension > 2200
+      ? {
+          width:
+            (asset.width || 0) >= (asset.height || 0)
+              ? 2200
+              : Math.round(((asset.width || 1) / (asset.height || 1)) * 2200),
+        }
+      : undefined;
+
+  const manipulated = await ImageManipulator.manipulateAsync(
+    asset.uri,
+    resize ? [{ resize }] : [],
+    {
+      base64: true,
+      compress: 0.92,
+      format: ImageManipulator.SaveFormat.JPEG,
+    }
+  );
+
   const base64 =
-    asset.base64 ??
-    (await FileSystem.readAsStringAsync(asset.uri, {
+    manipulated.base64 ??
+    (await FileSystem.readAsStringAsync(manipulated.uri, {
       encoding: FileSystem.EncodingType.Base64,
     }));
 
   return {
     base64,
-    mimeType: asset.mimeType || 'image/jpeg',
-    uri: asset.uri,
+    mimeType: 'image/jpeg',
+    uri: manipulated.uri,
   };
 }
 
