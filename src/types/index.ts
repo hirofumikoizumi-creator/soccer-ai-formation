@@ -3,6 +3,8 @@ export interface FormationData {
   formation: string;
   players: string[];
   imageUri: string;
+  imageBase64?: string;
+  mimeType?: string;
 }
 
 export interface AnalysisState {

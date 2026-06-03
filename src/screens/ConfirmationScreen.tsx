@@ -69,11 +69,15 @@ export default function ConfirmationScreen({
   const [homeFormationStr, setHomeFormationStr] = useState(homeFormation.formation);
   const [homePlayers, setHomePlayers] = useState(createPlayerFields(homeFormation.players));
   const [homeImageUri, setHomeImageUri] = useState(homeFormation.imageUri);
+  const [homeImageBase64, setHomeImageBase64] = useState(homeFormation.imageBase64);
+  const [homeMimeType, setHomeMimeType] = useState(homeFormation.mimeType || 'image/jpeg');
 
   const [awayTeam, setAwayTeam] = useState(awayFormation.teamName);
   const [awayFormationStr, setAwayFormationStr] = useState(awayFormation.formation);
   const [awayPlayers, setAwayPlayers] = useState(createPlayerFields(awayFormation.players));
   const [awayImageUri, setAwayImageUri] = useState(awayFormation.imageUri);
+  const [awayImageBase64, setAwayImageBase64] = useState(awayFormation.imageBase64);
+  const [awayMimeType, setAwayMimeType] = useState(awayFormation.mimeType || 'image/jpeg');
 
   const [loading, setLoading] = useState(false);
   const [reanalyzing, setReanalyzing] = useState<'home' | 'away' | null>(null);
@@ -92,8 +96,12 @@ export default function ConfirmationScreen({
 
       if (teamType === 'home') {
         setHomeImageUri(image.uri);
+        setHomeImageBase64(image.base64);
+        setHomeMimeType(image.mimeType);
       } else {
         setAwayImageUri(image.uri);
+        setAwayImageBase64(image.base64);
+        setAwayMimeType(image.mimeType);
       }
 
       const canAnalyze = await onConsumeAnalysisCredit();
@@ -150,6 +158,8 @@ export default function ConfirmationScreen({
         teamName: homeTeam,
         formation: homeFormationStr,
         imageUri: homeImageUri,
+        imageBase64: homeImageBase64,
+        mimeType: homeMimeType,
         players: homePlayers.map((p) => p.trim()).filter(Boolean),
       };
 
@@ -158,6 +168,8 @@ export default function ConfirmationScreen({
         teamName: awayTeam,
         formation: awayFormationStr,
         imageUri: awayImageUri,
+        imageBase64: awayImageBase64,
+        mimeType: awayMimeType,
         players: awayPlayers.map((p) => p.trim()).filter(Boolean),
       };
 

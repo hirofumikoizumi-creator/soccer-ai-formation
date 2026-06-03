@@ -9,7 +9,6 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import * as FileSystem from 'expo-file-system/legacy';
 import { pickImage, takePhoto } from '../utils/imagePicker';
 import { analyzeFormationImage } from '../services/geminiService';
 import type { FormationData } from '../types';
@@ -24,12 +23,19 @@ interface HomeScreenProps {
   onRequestRewardedAd: () => void;
 }
 
-function createPendingFormation(teamType: 'home' | 'away', imageUri: string): FormationData {
+function createPendingFormation(
+  teamType: 'home' | 'away',
+  imageUri: string,
+  imageBase64?: string,
+  mimeType?: string
+): FormationData {
   return {
     teamName: teamType === 'home' ? 'ホームチーム' : 'アウェイチーム',
     formation: '未解析',
     players: [],
     imageUri,
+    imageBase64,
+    mimeType,
   };
 }
 
@@ -64,7 +70,12 @@ export default function HomeScreen({
       }
 
       setAnalyzing(teamType);
-      const pendingFormation = createPendingFormation(teamType, image.uri);
+      const pendingFormation = createPendingFormation(
+        teamType,
+        image.uri,
+        image.base64,
+        image.mimeType
+      );
       if (teamType === 'home') {
         setHomeFormation(pendingFormation);
       } else {
@@ -92,6 +103,8 @@ export default function HomeScreen({
         formation: analysis.formation,
         players: analysis.players,
         imageUri: image.uri,
+        imageBase64: image.base64,
+        mimeType: image.mimeType,
       };
 
       if (teamType === 'home') {
@@ -123,7 +136,12 @@ export default function HomeScreen({
       }
 
       setAnalyzing(teamType);
-      const pendingFormation = createPendingFormation(teamType, image.uri);
+      const pendingFormation = createPendingFormation(
+        teamType,
+        image.uri,
+        image.base64,
+        image.mimeType
+      );
       if (teamType === 'home') {
         setHomeFormation(pendingFormation);
       } else {
@@ -151,6 +169,8 @@ export default function HomeScreen({
         formation: analysis.formation,
         players: analysis.players,
         imageUri: image.uri,
+        imageBase64: image.base64,
+        mimeType: image.mimeType,
       };
 
       if (teamType === 'home') {
@@ -201,15 +221,22 @@ export default function HomeScreen({
       creditConsumed = true;
 
       setAnalyzing(teamType);
-      const base64 = await FileSystem.readAsStringAsync(formation.imageUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      const analysis = await analyzeFormationImage(base64, teamType, 'image/jpeg');
+      if (!formation.imageBase64) {
+        throw new Error('画像データを再分析できませんでした。写真をもう一度選択してください');
+      }
+
+      const analysis = await analyzeFormationImage(
+        formation.imageBase64,
+        teamType,
+        formation.mimeType || 'image/jpeg'
+      );
       const formationData: FormationData = {
         teamName: analysis.teamName,
         formation: analysis.formation,
         players: analysis.players,
         imageUri: formation.imageUri,
+        imageBase64: formation.imageBase64,
+        mimeType: formation.mimeType || 'image/jpeg',
       };
 
       if (teamType === 'home') {

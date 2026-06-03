@@ -37,6 +37,10 @@ async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<
       encoding: FileSystem.EncodingType.Base64,
     }));
 
+  if (!base64) {
+    throw new Error('画像をAI解析用データに変換できませんでした');
+  }
+
   return {
     base64,
     mimeType: 'image/jpeg',
