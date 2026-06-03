@@ -11,7 +11,7 @@
     ],
     "ios": {
       "bundleIdentifier": "com.gsw.socceraiyosou",
-      "buildNumber": "25",
+      "buildNumber": "26",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "撮影したフォーメーション画像をAI解析するためにカメラを使用します。",
