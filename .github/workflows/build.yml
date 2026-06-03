@@ -1,4 +1,4 @@
-name: EAS Build and TestFlight Upload
+name: EAS Build
 
 on:
   push:
@@ -56,10 +56,3 @@ jobs:
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           APP_STORE_CONNECT_PRIVATE_KEY_PATH: ~/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8
 
-      - name: Submit to TestFlight
-        run: eas submit --platform ios --profile production --latest --non-interactive --no-wait
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          APP_STORE_CONNECT_PRIVATE_KEY_PATH: ~/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8
