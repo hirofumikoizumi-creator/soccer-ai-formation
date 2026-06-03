@@ -29,7 +29,13 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "extra": {
+      "eas": {
+        "projectId": "soccer-ai-yosou-ios"
+      }
+    },
     "plugins": [
+
       [
         "expo-image-picker",
         {
