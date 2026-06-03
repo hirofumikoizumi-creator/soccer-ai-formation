@@ -1,0 +1,79 @@
+name: EAS Build and TestFlight Upload
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          rm -f package-lock.json
+          npm install
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Verify EAS Configuration
+        run: |
+          cat app.json | grep -A 3 '"eas"'
+          cat eas.json | head -5
+
+      - name: Create .env file
+        run: |
+          if [ -z "${{ secrets.GEMINI_API_KEY }}" ]; then
+            echo "GEMINI_API_KEY secret is not set."
+            exit 1
+          fi
+          cat > .env << EOF
+          EXPO_PUBLIC_GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+          EXPO_PUBLIC_ADMOB_PUBLISHER_ID=${{ secrets.ADMOB_PUBLISHER_ID }}
+          EXPO_PUBLIC_ADMOB_BANNER_ID=${{ secrets.ADMOB_BANNER_ID }}
+          EXPO_PUBLIC_ADMOB_INTERSTITIAL_ID=${{ secrets.ADMOB_INTERSTITIAL_ID }}
+          EOF
+          test -s .env
+
+      - name: Create App Store Connect API key
+        run: |
+          mkdir -p ~/private_keys
+          echo "${{ secrets.APP_STORE_CONNECT_API_KEY }}" > ~/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8
+
+      - name: Build iOS app with EAS
+        id: eas-build
+        run: |
+          eas build --platform ios --profile production --non-interactive --wait --json > eas-build.json
+          cat eas-build.json
+          BUILD_ID=$(node -e "const fs = require('fs'); const data = JSON.parse(fs.readFileSync('eas-build.json', 'utf8')); const build = Array.isArray(data) ? data[0] : data; if (!build || !build.id) throw new Error('Missing EAS build id'); console.log(build.id);")
+          echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+          echo "EAS build id: $BUILD_ID"
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_PUBLIC_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY_PATH: ~/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8
+
+      - name: Submit to TestFlight
+        run: eas submit --platform ios --profile production --id "${{ steps.eas-build.outputs.build_id }}" --non-interactive --no-wait
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_PUBLIC_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY_PATH: ~/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8
+
