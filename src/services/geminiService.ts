@@ -105,6 +105,11 @@ async function postGeminiGenerateContent(payload: unknown) {
   throw lastError;
 }
 
+function ensureJapaneseText(value: unknown, fallback: string) {
+  const text = String(value || '').trim();
+  return text || fallback;
+}
+
 export async function analyzeFormationImage(
   imageBase64: string,
   teamType: 'home' | 'away',
@@ -113,15 +118,19 @@ export async function analyzeFormationImage(
   try {
     assertGeminiApiKey();
 
-    const prompt = `You are an expert football/soccer analyst and OCR assistant.
-Analyze the uploaded formation image for the ${teamType === 'home' ? 'home' : 'away'} team.
+    const prompt = `あなたはサッカーのフォーメーション画像を読む専門家です。
+アップロードされた${teamType === 'home' ? 'ホーム' : 'アウェイ'}チームの画像を解析してください。
+画像はスマートフォンのカメラ写真、スクリーンショット、斜め撮影、影、ぼけ、低解像度を含む可能性があります。
 
-Extract:
-1. Team name, if visible. If it is not visible, use "${teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'}".
-2. Formation shape, such as "4-3-3", "4-2-3-1", "3-4-2-1", or infer it from player positions if text is not visible.
-3. Player names from labels on the pitch. Read Japanese, English, and romanized names. Ignore shirt numbers unless they are part of the visible label.
+必ず以下を抽出してください:
+1. チーム名。見えない場合は "${teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'}"。
+2. フォーメーション。文字が読めない場合でも、GKを除く10人の配置から "4-3-3", "4-2-3-1", "3-4-2-1" などを推定してください。
+3. 選手名。日本語、英語、ローマ字表記を読み取ってください。背番号だけの場合は選手名に含めないでください。
 
-Return ONLY valid JSON in this exact format:
+カメラ写真の場合は、画像全体の向きとピッチ上の上下左右を推定し、各ラインの人数からフォーメーションを判断してください。
+選手名が一部しか読めない場合も、読める名前だけ返してください。
+
+返答は必ず日本語を含む有効なJSONのみで、この形式にしてください:
 {
   "teamName": "string",
   "formation": "string",
@@ -129,8 +138,7 @@ Return ONLY valid JSON in this exact format:
   "confidence": 0.0-1.0
 }
 
-If the image is low resolution, still infer the formation from positions and return any readable player names.
-Do not include markdown, comments, or explanatory text.`;
+Markdown、説明文、コードブロックは絶対に含めないでください。`;
 
     const response = await postGeminiGenerateContent({
       contents: [
@@ -161,8 +169,11 @@ Do not include markdown, comments, or explanatory text.`;
 
     const analysis = extractJsonObject(content);
     return {
-      teamName: analysis.teamName || (teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'),
-      formation: analysis.formation || '未解析',
+      teamName: ensureJapaneseText(
+        analysis.teamName,
+        teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'
+      ),
+      formation: ensureJapaneseText(analysis.formation, '未解析'),
       players: normalizePlayers(analysis.players),
       confidence: typeof analysis.confidence === 'number' ? analysis.confidence : 0.5,
     };
@@ -183,26 +194,27 @@ export async function predictMatchOutcome(
   try {
     assertGeminiApiKey();
 
-    const prompt = `You are a professional soccer analyst. Based on the following match information, provide a prediction:
+    const prompt = `あなたはプロのサッカー戦術アナリストです。以下の試合情報をもとに、日本語で試合展開と勝敗予測を作成してください。
 
-Home Team: ${homeTeam}
-Home Formation: ${homeFormation}
-Home Players: ${homePlayers.join(', ') || 'Unknown'}
+ホームチーム: ${homeTeam}
+ホームのフォーメーション: ${homeFormation}
+ホームの選手: ${homePlayers.join(', ') || '不明'}
 
-Away Team: ${awayTeam}
-Away Formation: ${awayFormation}
-Away Players: ${awayPlayers.join(', ') || 'Unknown'}
+アウェイチーム: ${awayTeam}
+アウェイのフォーメーション: ${awayFormation}
+アウェイの選手: ${awayPlayers.join(', ') || '不明'}
 
-Provide a detailed analysis and prediction. Return ONLY valid JSON in this exact format:
+必ず日本語で、具体的な試合展開、攻撃・守備の噛み合わせ、勝敗予測の理由を説明してください。
+返答は有効なJSONのみで、この形式にしてください:
 {
   "predictedScore": "X-Y",
   "homeWinProbability": 0-100,
   "drawProbability": 0-100,
   "awayWinProbability": 0-100,
-  "tacticalAnalysis": "Detailed tactical analysis explaining the prediction"
+  "tacticalAnalysis": "日本語の詳細な戦術分析"
 }
 
-Important: The three probabilities MUST sum to 100. Do not include any other text or markdown.`;
+重要: 3つの確率は必ず合計100にしてください。英語、Markdown、説明文、コードブロックは含めないでください。`;
 
     const response = await postGeminiGenerateContent({
       contents: [
@@ -252,7 +264,7 @@ Important: The three probabilities MUST sum to 100. Do not include any other tex
       homeWinProbability: Math.max(0, Math.min(100, prediction.homeWinProbability || 33)),
       drawProbability: Math.max(0, Math.min(100, prediction.drawProbability || 34)),
       awayWinProbability: Math.max(0, Math.min(100, prediction.awayWinProbability || 33)),
-      tacticalAnalysis: prediction.tacticalAnalysis || 'Tactical analysis pending...',
+      tacticalAnalysis: ensureJapaneseText(prediction.tacticalAnalysis, '戦術分析を生成できませんでした。'),
     };
   } catch (error) {
     console.error('Error predicting match outcome:', error);

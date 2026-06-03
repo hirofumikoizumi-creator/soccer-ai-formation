@@ -12,12 +12,12 @@ export interface PickedImage {
 async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<PickedImage> {
   const maxDimension = Math.max(asset.width || 0, asset.height || 0);
   const resize =
-    maxDimension > 2200
+    maxDimension > 3000
       ? {
           width:
             (asset.width || 0) >= (asset.height || 0)
-              ? 2200
-              : Math.round(((asset.width || 1) / (asset.height || 1)) * 2200),
+              ? 3000
+              : Math.round(((asset.width || 1) / (asset.height || 1)) * 3000),
         }
       : undefined;
 
@@ -26,7 +26,7 @@ async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<
     resize ? [{ resize }] : [],
     {
       base64: true,
-      compress: 0.92,
+      compress: 0.96,
       format: ImageManipulator.SaveFormat.JPEG,
     }
   );

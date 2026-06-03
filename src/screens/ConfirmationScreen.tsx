@@ -8,8 +8,11 @@ import {
   TextInput,
   Image,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import type { FormationData } from '../types';
+import { analyzeFormationImage } from '../services/geminiService';
+import { pickImage, takePhoto } from '../utils/imagePicker';
 
 interface ConfirmationScreenProps {
   homeFormation: FormationData;
@@ -29,12 +32,54 @@ export default function ConfirmationScreen({
   const [homeTeam, setHomeTeam] = useState(homeFormation.teamName);
   const [homeFormationStr, setHomeFormationStr] = useState(homeFormation.formation);
   const [homePlayers, setHomePlayers] = useState(homeFormation.players.join('\n'));
+  const [homeImageUri, setHomeImageUri] = useState(homeFormation.imageUri);
 
   const [awayTeam, setAwayTeam] = useState(awayFormation.teamName);
   const [awayFormationStr, setAwayFormationStr] = useState(awayFormation.formation);
   const [awayPlayers, setAwayPlayers] = useState(awayFormation.players.join('\n'));
+  const [awayImageUri, setAwayImageUri] = useState(awayFormation.imageUri);
 
   const [loading, setLoading] = useState(false);
+  const [reanalyzing, setReanalyzing] = useState<'home' | 'away' | null>(null);
+
+  const handleReplaceImage = async (
+    teamType: 'home' | 'away',
+    source: 'library' | 'camera'
+  ) => {
+    try {
+      setReanalyzing(teamType);
+      const image = source === 'library' ? await pickImage() : await takePhoto();
+      if (!image) {
+        return;
+      }
+
+      if (teamType === 'home') {
+        setHomeImageUri(image.uri);
+      } else {
+        setAwayImageUri(image.uri);
+      }
+
+      const analysis = await analyzeFormationImage(image.base64, teamType, image.mimeType);
+      if (teamType === 'home') {
+        setHomeTeam(analysis.teamName);
+        setHomeFormationStr(analysis.formation);
+        setHomePlayers(analysis.players.join('\n'));
+      } else {
+        setAwayTeam(analysis.teamName);
+        setAwayFormationStr(analysis.formation);
+        setAwayPlayers(analysis.players.join('\n'));
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'AI解析に失敗しました';
+      Alert.alert(
+        '画像を変更しました',
+        `${message}\n\n必要に応じてチーム名、フォーメーション、選手名を手入力してください。`
+      );
+      console.error(error);
+    } finally {
+      setReanalyzing(null);
+    }
+  };
 
   const handleConfirm = async () => {
     setLoading(true);
@@ -43,6 +88,7 @@ export default function ConfirmationScreen({
         ...homeFormation,
         teamName: homeTeam,
         formation: homeFormationStr,
+        imageUri: homeImageUri,
         players: homePlayers
           .split('\n')
           .map((p) => p.trim())
@@ -53,6 +99,7 @@ export default function ConfirmationScreen({
         ...awayFormation,
         teamName: awayTeam,
         formation: awayFormationStr,
+        imageUri: awayImageUri,
         players: awayPlayers
           .split('\n')
           .map((p) => p.trim())
@@ -77,9 +124,29 @@ export default function ConfirmationScreen({
         <Text style={styles.sectionTitle}>ホームチーム</Text>
 
         <Image
-          source={{ uri: homeFormation.imageUri }}
+          source={{ uri: homeImageUri }}
           style={styles.formationImage}
+          resizeMode="contain"
         />
+        <View style={styles.imageActions}>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => handleReplaceImage('home', 'library')}
+            disabled={reanalyzing === 'home'}
+          >
+            <Text style={styles.secondaryButtonText}>ホーム写真を変更</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => handleReplaceImage('home', 'camera')}
+            disabled={reanalyzing === 'home'}
+          >
+            <Text style={styles.secondaryButtonText}>ホームを撮影</Text>
+          </TouchableOpacity>
+        </View>
+        {reanalyzing === 'home' && (
+          <ActivityIndicator size="small" color={SAMURAI_BLUE} style={styles.inlineLoader} />
+        )}
 
         <View style={styles.formGroup}>
           <Text style={styles.label}>チーム名</Text>
@@ -119,9 +186,29 @@ export default function ConfirmationScreen({
         <Text style={styles.sectionTitle}>アウェイチーム</Text>
 
         <Image
-          source={{ uri: awayFormation.imageUri }}
+          source={{ uri: awayImageUri }}
           style={styles.formationImage}
+          resizeMode="contain"
         />
+        <View style={styles.imageActions}>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => handleReplaceImage('away', 'library')}
+            disabled={reanalyzing === 'away'}
+          >
+            <Text style={styles.secondaryButtonText}>アウェイ写真を変更</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => handleReplaceImage('away', 'camera')}
+            disabled={reanalyzing === 'away'}
+          >
+            <Text style={styles.secondaryButtonText}>アウェイを撮影</Text>
+          </TouchableOpacity>
+        </View>
+        {reanalyzing === 'away' && (
+          <ActivityIndicator size="small" color={SAMURAI_BLUE} style={styles.inlineLoader} />
+        )}
 
         <View style={styles.formGroup}>
           <Text style={styles.label}>チーム名</Text>
@@ -216,10 +303,31 @@ const styles = StyleSheet.create({
   },
   formationImage: {
     width: '100%',
-    height: 180,
+    height: 320,
     borderRadius: 8,
+    marginBottom: 12,
+    backgroundColor: '#f0f0f0',
+  },
+  imageActions: {
+    flexDirection: 'row',
+    gap: 8,
     marginBottom: 16,
-    backgroundColor: '#e0e0e0',
+  },
+  secondaryButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: SAMURAI_BLUE,
+    borderRadius: 6,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    color: SAMURAI_BLUE,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  inlineLoader: {
+    marginBottom: 16,
   },
   formGroup: {
     marginBottom: 16,
