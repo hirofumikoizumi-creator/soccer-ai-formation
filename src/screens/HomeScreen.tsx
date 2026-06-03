@@ -19,6 +19,15 @@ interface HomeScreenProps {
 
 const SAMURAI_BLUE = '#003F8F';
 
+function createPendingFormation(teamType: 'home' | 'away', imageUri: string): FormationData {
+  return {
+    teamName: teamType === 'home' ? 'ホームチーム' : 'アウェイチーム',
+    formation: '未解析',
+    players: [],
+    imageUri,
+  };
+}
+
 export default function HomeScreen({ onProceed }: HomeScreenProps) {
   const [homeFormation, setHomeFormation] = useState<FormationData | null>(null);
   const [awayFormation, setAwayFormation] = useState<FormationData | null>(null);
@@ -27,17 +36,27 @@ export default function HomeScreen({ onProceed }: HomeScreenProps) {
 
   const handleSelectImage = async (teamType: 'home' | 'away') => {
     try {
-      const base64 = await pickImage();
-      if (!base64) return;
+      const image = await pickImage();
+      if (!image) {
+        Alert.alert('写真を選択できません', '写真ライブラリへのアクセスを許可してからもう一度お試しください');
+        return;
+      }
 
       setAnalyzing(teamType);
-      const analysis = await analyzeFormationImage(base64, teamType);
+      const pendingFormation = createPendingFormation(teamType, image.uri);
+      if (teamType === 'home') {
+        setHomeFormation(pendingFormation);
+      } else {
+        setAwayFormation(pendingFormation);
+      }
+
+      const analysis = await analyzeFormationImage(image.base64, teamType);
 
       const formationData: FormationData = {
         teamName: analysis.teamName,
         formation: analysis.formation,
         players: analysis.players,
-        imageUri: `data:image/jpeg;base64,${base64}`,
+        imageUri: image.uri,
       };
 
       if (teamType === 'home') {
@@ -46,7 +65,10 @@ export default function HomeScreen({ onProceed }: HomeScreenProps) {
         setAwayFormation(formationData);
       }
     } catch (error) {
-      Alert.alert('エラー', 'フォーメーション画像の解析に失敗しました');
+      Alert.alert(
+        '画像を登録しました',
+        'AI解析に失敗しました。確認画面でチーム名やフォーメーションを手入力してください'
+      );
       console.error(error);
     } finally {
       setAnalyzing(null);
@@ -55,17 +77,27 @@ export default function HomeScreen({ onProceed }: HomeScreenProps) {
 
   const handleTakePhoto = async (teamType: 'home' | 'away') => {
     try {
-      const base64 = await takePhoto();
-      if (!base64) return;
+      const image = await takePhoto();
+      if (!image) {
+        Alert.alert('カメラを起動できません', 'カメラへのアクセスを許可してからもう一度お試しください');
+        return;
+      }
 
       setAnalyzing(teamType);
-      const analysis = await analyzeFormationImage(base64, teamType);
+      const pendingFormation = createPendingFormation(teamType, image.uri);
+      if (teamType === 'home') {
+        setHomeFormation(pendingFormation);
+      } else {
+        setAwayFormation(pendingFormation);
+      }
+
+      const analysis = await analyzeFormationImage(image.base64, teamType);
 
       const formationData: FormationData = {
         teamName: analysis.teamName,
         formation: analysis.formation,
         players: analysis.players,
-        imageUri: `data:image/jpeg;base64,${base64}`,
+        imageUri: image.uri,
       };
 
       if (teamType === 'home') {
@@ -74,7 +106,10 @@ export default function HomeScreen({ onProceed }: HomeScreenProps) {
         setAwayFormation(formationData);
       }
     } catch (error) {
-      Alert.alert('エラー', 'フォーメーション画像の解析に失敗しました');
+      Alert.alert(
+        '画像を登録しました',
+        'AI解析に失敗しました。確認画面でチーム名やフォーメーションを手入力してください'
+      );
       console.error(error);
     } finally {
       setAnalyzing(null);
