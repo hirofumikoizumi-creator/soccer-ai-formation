@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 export const DAILY_FREE_ANALYSIS_LIMIT = 3;
 

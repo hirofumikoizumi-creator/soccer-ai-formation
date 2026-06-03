@@ -9,7 +9,7 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { pickImage, takePhoto } from '../utils/imagePicker';
 import { analyzeFormationImage } from '../services/geminiService';
 import type { FormationData } from '../types';
