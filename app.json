@@ -6,19 +6,12 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#003F8F"
-    },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
-      "supportsTabletMode": true,
       "bundleIdentifier": "com.gsw.socceraiyosou",
-      "buildNumber": "1",
-      "teamId": "2GKZ33FAB9"
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
@@ -35,7 +28,6 @@
       }
     },
     "plugins": [
-
       [
         "expo-image-picker",
         {
