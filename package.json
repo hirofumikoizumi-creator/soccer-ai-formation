@@ -1,0 +1,37 @@
+{
+  "name": "soccer-ai-formation",
+  "version": "1.0.0",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "test": "jest"
+  },
+  "keywords": [
+    "soccer",
+    "ai",
+    "formation"
+  ],
+  "author": "",
+  "license": "ISC",
+  "description": "Soccer AI Formation Analysis App for iOS",
+  "dependencies": {
+    "@react-navigation/bottom-tabs": "^7.16.2",
+    "@react-navigation/native": "^7.2.5",
+    "axios": "^1.16.1",
+    "expo": "^56.0.8",
+    "expo-ads-admob": "^13.0.0",
+    "expo-camera": "^56.0.7",
+    "expo-constants": "^56.0.16",
+    "expo-file-system": "^56.0.7",
+    "expo-image-picker": "^56.0.15",
+    "expo-router": "^56.2.8",
+    "expo-status-bar": "^56.0.4",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-native": "^0.85.3",
+    "react-native-web": "^0.21.2"
+  }
+}
