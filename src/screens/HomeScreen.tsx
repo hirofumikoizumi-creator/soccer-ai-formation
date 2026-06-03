@@ -139,6 +139,7 @@ export default function HomeScreen({ onProceed }: HomeScreenProps) {
             <Image
               source={{ uri: homeFormation.imageUri }}
               style={styles.formationImage}
+              resizeMode="contain"
             />
             <Text style={styles.teamName}>{homeFormation.teamName}</Text>
             <Text style={styles.formation}>フォーメーション: {homeFormation.formation}</Text>
@@ -192,6 +193,7 @@ export default function HomeScreen({ onProceed }: HomeScreenProps) {
             <Image
               source={{ uri: awayFormation.imageUri }}
               style={styles.formationImage}
+              resizeMode="contain"
             />
             <Text style={styles.teamName}>{awayFormation.teamName}</Text>
             <Text style={styles.formation}>フォーメーション: {awayFormation.formation}</Text>
@@ -299,10 +301,10 @@ const styles = StyleSheet.create({
   },
   formationImage: {
     width: '100%',
-    height: 200,
+    height: 360,
     borderRadius: 8,
     marginBottom: 12,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: '#f0f0f0',
   },
   teamName: {
     fontSize: 16,

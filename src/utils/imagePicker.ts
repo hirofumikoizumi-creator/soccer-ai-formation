@@ -1,5 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import { Alert, Linking } from 'react-native';
 
 export interface PickedImage {
   base64: string;
@@ -19,11 +20,35 @@ async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<
   };
 }
 
+function showSettingsAlert(title: string, message: string) {
+  Alert.alert(title, message, [
+    { text: 'キャンセル', style: 'cancel' },
+    {
+      text: '設定を開く',
+      onPress: () => {
+        Linking.openSettings().catch((error) => {
+          console.error('Error opening settings:', error);
+        });
+      },
+    },
+  ]);
+}
+
 export async function pickImage(): Promise<PickedImage | null> {
   try {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const currentPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
+    const permission = currentPermission.granted
+      ? currentPermission
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
     if (!permission.granted) {
       console.error('Permission to access media library was denied');
+      if (!permission.canAskAgain) {
+        showSettingsAlert(
+          '写真へのアクセスが必要です',
+          'iPhoneの設定で写真へのアクセスを許可してください。'
+        );
+      }
       return null;
     }
 
@@ -31,7 +56,7 @@ export async function pickImage(): Promise<PickedImage | null> {
       mediaTypes: ['images'],
       allowsEditing: false,
       base64: true,
-      quality: 0.8,
+      quality: 1,
       preferredAssetRepresentationMode:
         ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
       shouldDownloadFromNetwork: true,
@@ -50,9 +75,19 @@ export async function pickImage(): Promise<PickedImage | null> {
 
 export async function takePhoto(): Promise<PickedImage | null> {
   try {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    const currentPermission = await ImagePicker.getCameraPermissionsAsync();
+    const permission = currentPermission.granted
+      ? currentPermission
+      : await ImagePicker.requestCameraPermissionsAsync();
+
     if (!permission.granted) {
       console.error('Permission to access camera was denied');
+      if (!permission.canAskAgain) {
+        showSettingsAlert(
+          'カメラへのアクセスが必要です',
+          'iPhoneの設定でカメラへのアクセスを許可してください。'
+        );
+      }
       return null;
     }
 
@@ -60,7 +95,7 @@ export async function takePhoto(): Promise<PickedImage | null> {
       mediaTypes: ['images'],
       allowsEditing: false,
       base64: true,
-      quality: 0.8,
+      quality: 1,
       preferredAssetRepresentationMode:
         ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
     });
