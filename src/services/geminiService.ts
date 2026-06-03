@@ -23,10 +23,42 @@ export interface PredictionResult {
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
 const GEMINI_MODELS = [
-  process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash',
-  'gemini-2.0-flash',
+  process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.0-flash',
+  'gemini-2.5-flash',
 ];
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+const FORMATION_RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    teamName: { type: 'STRING' },
+    formation: { type: 'STRING' },
+    players: {
+      type: 'ARRAY',
+      items: { type: 'STRING' },
+    },
+    confidence: { type: 'NUMBER' },
+  },
+  required: ['teamName', 'formation', 'players', 'confidence'],
+};
+
+const PREDICTION_RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    predictedScore: { type: 'STRING' },
+    homeWinProbability: { type: 'NUMBER' },
+    drawProbability: { type: 'NUMBER' },
+    awayWinProbability: { type: 'NUMBER' },
+    tacticalAnalysis: { type: 'STRING' },
+  },
+  required: [
+    'predictedScore',
+    'homeWinProbability',
+    'drawProbability',
+    'awayWinProbability',
+    'tacticalAnalysis',
+  ],
+};
 
 function assertGeminiApiKey() {
   if (!GEMINI_API_KEY) {
@@ -129,14 +161,7 @@ export async function analyzeFormationImage(
 
 カメラ写真の場合は、画像全体の向きとピッチ上の上下左右を推定し、各ラインの人数からフォーメーションを判断してください。
 選手名が一部しか読めない場合も、読める名前だけ返してください。
-
-返答は必ず日本語を含む有効なJSONのみで、この形式にしてください:
-{
-  "teamName": "string",
-  "formation": "string",
-  "players": ["player1", "player2", ...],
-  "confidence": 0.0-1.0
-}
+できるだけ短時間で判断し、推測できる場合は "未解析" ではなく最も可能性が高いフォーメーションを返してください。
 
 Markdown、説明文、コードブロックは絶対に含めないでください。`;
 
@@ -158,6 +183,9 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
       ],
       generationConfig: {
         responseMimeType: 'application/json',
+        responseSchema: FORMATION_RESPONSE_SCHEMA,
+        candidateCount: 1,
+        maxOutputTokens: 512,
         temperature: 0.1,
       },
     });
@@ -228,6 +256,9 @@ export async function predictMatchOutcome(
       ],
       generationConfig: {
         responseMimeType: 'application/json',
+        responseSchema: PREDICTION_RESPONSE_SCHEMA,
+        candidateCount: 1,
+        maxOutputTokens: 768,
         temperature: 0.2,
       },
     });

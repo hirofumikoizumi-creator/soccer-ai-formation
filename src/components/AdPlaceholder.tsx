@@ -7,6 +7,7 @@ interface AdPlaceholderProps {
 }
 
 const SAMURAI_BLUE = '#003F8F';
+const BANNER_AD_ID = process.env.EXPO_PUBLIC_ADMOB_BANNER_ID || 'ca-app-pub-5840457424714744/2191315578';
 const INTERSTITIAL_AD_ID =
   process.env.EXPO_PUBLIC_ADMOB_INTERSTITIAL_ID || 'ca-app-pub-5840457424714744/2994711458';
 
@@ -82,12 +83,11 @@ export default function AdPlaceholder({ type = 'banner', onAdClosed }: AdPlaceho
   }
 
   const BannerAd = adsModule.BannerAd;
-  const bannerAdId = process.env.EXPO_PUBLIC_ADMOB_BANNER_ID || adsModule.TestIds.BANNER;
 
   return (
     <View style={styles.bannerContainer}>
       <BannerAd
-        unitId={bannerAdId}
+        unitId={BANNER_AD_ID}
         size={adsModule.BannerAdSize.BANNER}
         requestOptions={{
           requestNonPersonalizedAdsOnly: true,
