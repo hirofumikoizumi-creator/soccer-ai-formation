@@ -102,13 +102,16 @@ soccer-ai-formation/
 
 ## AdMob 統合
 
-現在、AdMob 広告はプレースホルダーコンポーネント（`AdPlaceholder.tsx`）として実装されています。
+AdMob 広告は `react-native-google-mobile-ads` で実装されています。
 
-本番環境で AdMob を統合する場合:
+GitHub Actions / EAS Build では、次の Secrets を設定してください:
 
-1. `expo-ads-admob` パッケージをインストール
-2. AdMob ユニット ID を設定
-3. `AdPlaceholder.tsx` を実際の AdMob コンポーネントに置き換え
+1. `ADMOB_PUBLISHER_ID`: `pub-5840457424714744`
+2. `ADMOB_INTERSTITIAL_ID`: `ca-app-pub-5840457424714744/2994711458`
+3. `ADMOB_BANNER_ID`: バナー広告を使う場合の広告ユニット ID
+
+iOS の AdMob App ID は `app.json` の `react-native-google-mobile-ads` 設定に入れます。
+本番広告を有効にする場合は、Google 公式テスト App ID を AdMob 管理画面の `ca-app-pub-...~...` 形式の iOS App ID に置き換えてください。
 
 ## デザイン
 

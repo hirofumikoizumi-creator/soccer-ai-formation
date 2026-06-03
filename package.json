@@ -20,7 +20,6 @@
   "dependencies": {
     "axios": "^1.16.1",
     "expo": "^56.0.8",
-    "expo-ads-admob": "^13.0.0",
     "expo-camera": "^56.0.7",
     "expo-constants": "^56.0.16",
     "expo-file-system": "^56.0.7",
@@ -31,6 +30,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "^0.85.3",
+    "react-native-google-mobile-ads": "^16.3.3",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "^4.4.1",
     "react-native-web": "^0.21.2"

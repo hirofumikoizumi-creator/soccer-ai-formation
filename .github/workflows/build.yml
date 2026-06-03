@@ -39,6 +39,7 @@ jobs:
           cat > .env << EOF
           EXPO_PUBLIC_GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
           EXPO_PUBLIC_ADMOB_PUBLISHER_ID=${{ secrets.ADMOB_PUBLISHER_ID }}
+          EXPO_PUBLIC_ADMOB_BANNER_ID=${{ secrets.ADMOB_BANNER_ID }}
           EXPO_PUBLIC_ADMOB_INTERSTITIAL_ID=${{ secrets.ADMOB_INTERSTITIAL_ID }}
           EOF
 
