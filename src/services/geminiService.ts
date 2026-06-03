@@ -24,15 +24,52 @@ export interface PredictionResult {
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
+function assertGeminiApiKey() {
+  if (!GEMINI_API_KEY) {
+    throw new Error('Missing EXPO_PUBLIC_GEMINI_API_KEY');
+  }
+}
+
+function extractJsonObject(text: string) {
+  const cleaned = text
+    .replace(/```json/gi, '```')
+    .replace(/```/g, '')
+    .trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error(`Gemini response did not contain JSON: ${text}`);
+  }
+
+  return JSON.parse(cleaned.slice(start, end + 1));
+}
+
+function normalizePlayers(players: unknown): string[] {
+  if (!Array.isArray(players)) {
+    return [];
+  }
+
+  return players
+    .map((player) => String(player).trim())
+    .filter(Boolean);
+}
+
 export async function analyzeFormationImage(
   imageBase64: string,
-  teamType: 'home' | 'away'
+  teamType: 'home' | 'away',
+  mimeType = 'image/jpeg'
 ): Promise<FormationAnalysis> {
   try {
-    const prompt = `You are a soccer/football expert. Analyze this formation image and extract:
-1. Team name (if visible, otherwise return "Unknown Team")
-2. Formation (e.g., "4-3-3", "4-2-3-1", etc.)
-3. Player names (if visible, otherwise return empty array)
+    assertGeminiApiKey();
+
+    const prompt = `You are an expert football/soccer analyst and OCR assistant.
+Analyze the uploaded formation image for the ${teamType === 'home' ? 'home' : 'away'} team.
+
+Extract:
+1. Team name, if visible. If it is not visible, use "${teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'}".
+2. Formation shape, such as "4-3-3", "4-2-3-1", "3-4-2-1", or infer it from player positions if text is not visible.
+3. Player names from labels on the pitch. Read Japanese, English, and romanized names. Ignore shirt numbers unless they are part of the visible label.
 
 Return ONLY valid JSON in this exact format:
 {
@@ -42,7 +79,8 @@ Return ONLY valid JSON in this exact format:
   "confidence": 0.0-1.0
 }
 
-Do not include any other text or markdown formatting.`;
+If the image is low resolution, still infer the formation from positions and return any readable player names.
+Do not include markdown, comments, or explanatory text.`;
 
     const response = await axios.post(
       `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
@@ -55,19 +93,23 @@ Do not include any other text or markdown formatting.`;
               },
               {
                 inlineData: {
-                  mimeType: 'image/jpeg',
+                  mimeType,
                   data: imageBase64,
                 },
               },
             ],
           },
         ],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.1,
+        },
       },
       {
         headers: {
           'Content-Type': 'application/json',
         },
-        timeout: 30000,
+        timeout: 60000,
       }
     );
 
@@ -76,12 +118,11 @@ Do not include any other text or markdown formatting.`;
       throw new Error('No response from Gemini API');
     }
 
-    // Parse the JSON response
-    const analysis = JSON.parse(content);
+    const analysis = extractJsonObject(content);
     return {
-      teamName: analysis.teamName || 'Unknown Team',
-      formation: analysis.formation || '4-3-3',
-      players: Array.isArray(analysis.players) ? analysis.players : [],
+      teamName: analysis.teamName || (teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'),
+      formation: analysis.formation || '未解析',
+      players: normalizePlayers(analysis.players),
       confidence: typeof analysis.confidence === 'number' ? analysis.confidence : 0.5,
     };
   } catch (error) {
@@ -99,6 +140,8 @@ export async function predictMatchOutcome(
   awayPlayers: string[]
 ): Promise<PredictionResult> {
   try {
+    assertGeminiApiKey();
+
     const prompt = `You are a professional soccer analyst. Based on the following match information, provide a prediction:
 
 Home Team: ${homeTeam}
@@ -132,12 +175,16 @@ Important: The three probabilities MUST sum to 100. Do not include any other tex
             ],
           },
         ],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.2,
+        },
       },
       {
         headers: {
           'Content-Type': 'application/json',
         },
-        timeout: 30000,
+        timeout: 60000,
       }
     );
 
@@ -146,8 +193,7 @@ Important: The three probabilities MUST sum to 100. Do not include any other tex
       throw new Error('No response from Gemini API');
     }
 
-    // Parse the JSON response
-    const prediction = JSON.parse(content);
+    const prediction = extractJsonObject(content);
 
     // Validate probabilities sum to 100
     const total =

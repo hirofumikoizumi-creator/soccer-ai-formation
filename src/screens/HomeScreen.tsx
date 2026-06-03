@@ -50,7 +50,7 @@ export default function HomeScreen({ onProceed }: HomeScreenProps) {
         setAwayFormation(pendingFormation);
       }
 
-      const analysis = await analyzeFormationImage(image.base64, teamType);
+      const analysis = await analyzeFormationImage(image.base64, teamType, image.mimeType);
 
       const formationData: FormationData = {
         teamName: analysis.teamName,
@@ -91,7 +91,7 @@ export default function HomeScreen({ onProceed }: HomeScreenProps) {
         setAwayFormation(pendingFormation);
       }
 
-      const analysis = await analyzeFormationImage(image.base64, teamType);
+      const analysis = await analyzeFormationImage(image.base64, teamType, image.mimeType);
 
       const formationData: FormationData = {
         teamName: analysis.teamName,

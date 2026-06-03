@@ -36,6 +36,10 @@ jobs:
 
       - name: Create .env file
         run: |
+          if [ -z "${{ secrets.GEMINI_API_KEY }}" ]; then
+            echo "GEMINI_API_KEY secret is not set."
+            exit 1
+          fi
           cat > .env << EOF
           EXPO_PUBLIC_GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
           EXPO_PUBLIC_ADMOB_PUBLISHER_ID=${{ secrets.ADMOB_PUBLISHER_ID }}

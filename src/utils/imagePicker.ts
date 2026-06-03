@@ -4,6 +4,7 @@ import { Alert, Linking } from 'react-native';
 
 export interface PickedImage {
   base64: string;
+  mimeType: string;
   uri: string;
 }
 
@@ -16,6 +17,7 @@ async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<
 
   return {
     base64,
+    mimeType: asset.mimeType || 'image/jpeg',
     uri: asset.uri,
   };
 }
