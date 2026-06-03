@@ -30,7 +30,7 @@ const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/mo
 
 function assertGeminiApiKey() {
   if (!GEMINI_API_KEY) {
-    throw new Error('Missing EXPO_PUBLIC_GEMINI_API_KEY');
+    throw new Error('AI解析キーがアプリに設定されていません');
   }
 }
 
@@ -77,7 +77,28 @@ async function postGeminiGenerateContent(payload: unknown) {
       );
     } catch (error) {
       lastError = error;
-      console.error(`Gemini request failed with model ${model}:`, error);
+      if (axios.isAxiosError(error)) {
+        console.error(`Gemini request failed with model ${model}:`, {
+          status: error.response?.status,
+          data: error.response?.data,
+          message: error.message,
+        });
+      } else {
+        console.error(`Gemini request failed with model ${model}:`, error);
+      }
+    }
+  }
+
+  if (axios.isAxiosError(lastError)) {
+    const status = lastError.response?.status;
+    if (status === 400) {
+      throw new Error('AI解析リクエストの画像形式を処理できませんでした');
+    }
+    if (status === 401 || status === 403) {
+      throw new Error('Gemini APIキーまたはAPI権限を確認してください');
+    }
+    if (status === 429) {
+      throw new Error('Gemini APIの利用上限に達しています。しばらく待ってから再試行してください');
     }
   }
 

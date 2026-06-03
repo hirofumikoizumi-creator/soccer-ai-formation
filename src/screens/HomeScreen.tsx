@@ -28,6 +28,14 @@ function createPendingFormation(teamType: 'home' | 'away', imageUri: string): Fo
   };
 }
 
+function getAnalysisErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return 'AI解析に失敗しました。確認画面でチーム名やフォーメーションを手入力してください';
+}
+
 export default function HomeScreen({ onProceed }: HomeScreenProps) {
   const [homeFormation, setHomeFormation] = useState<FormationData | null>(null);
   const [awayFormation, setAwayFormation] = useState<FormationData | null>(null);
@@ -67,7 +75,7 @@ export default function HomeScreen({ onProceed }: HomeScreenProps) {
     } catch (error) {
       Alert.alert(
         '画像を登録しました',
-        'AI解析に失敗しました。確認画面でチーム名やフォーメーションを手入力してください'
+        `${getAnalysisErrorMessage(error)}\n\n確認画面でチーム名やフォーメーションを手入力できます。`
       );
       console.error(error);
     } finally {
@@ -108,7 +116,7 @@ export default function HomeScreen({ onProceed }: HomeScreenProps) {
     } catch (error) {
       Alert.alert(
         '画像を登録しました',
-        'AI解析に失敗しました。確認画面でチーム名やフォーメーションを手入力してください'
+        `${getAnalysisErrorMessage(error)}\n\n確認画面でチーム名やフォーメーションを手入力できます。`
       );
       console.error(error);
     } finally {
