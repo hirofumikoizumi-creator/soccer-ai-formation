@@ -42,14 +42,14 @@
         "react-native-google-mobile-ads",
         {
           "androidAppId": "ca-app-pub-3940256099942544~3347511713",
-          "iosAppId": "ca-app-pub-3940256099942544~1458002511",
+          "iosAppId": "ca-app-pub-5840457424714744~2343444534",
           "userTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you."
         }
       ]
     ],
     "react-native-google-mobile-ads": {
       "android_app_id": "ca-app-pub-3940256099942544~3347511713",
-      "ios_app_id": "ca-app-pub-3940256099942544~1458002511",
+      "ios_app_id": "ca-app-pub-5840457424714744~2343444534",
       "user_tracking_usage_description": "This identifier will be used to deliver personalized ads to you."
     }
   }
