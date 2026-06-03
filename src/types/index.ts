@@ -2,7 +2,7 @@ export interface FormationData {
   teamName: string;
   formation: string;
   players: string[];
-  imageUri: string;
+  imageUri?: string;
   imageBase64?: string;
   mimeType?: string;
 }

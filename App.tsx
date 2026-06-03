@@ -52,20 +52,6 @@ export default function App() {
     return true;
   };
 
-  const restoreAnalysisCredit = async () => {
-    const freshUsage = await loadAnalysisUsage();
-    if (freshUsage.used <= 0) {
-      setUsage(freshUsage);
-      return;
-    }
-
-    const nextUsage = {
-      ...freshUsage,
-      used: freshUsage.used - 1,
-    };
-    await persistUsage(nextUsage);
-  };
-
   const handleRewardEarned = async () => {
     const freshUsage = await loadAnalysisUsage();
     const nextUsage = {
@@ -73,7 +59,7 @@ export default function App() {
       rewardedCredits: freshUsage.rewardedCredits + 1,
     };
     await persistUsage(nextUsage);
-    Alert.alert('解析回数を追加しました', 'AI解析を1回追加で利用できます。');
+    Alert.alert('試合予想回数を追加しました', 'AI分析を1回追加で利用できます。');
   };
 
   const handleHomeScreenProceed = (home: FormationData, away: FormationData) => {
@@ -86,6 +72,21 @@ export default function App() {
     home: FormationData,
     away: FormationData
   ) => {
+    const freshUsage = await loadAnalysisUsage();
+    const remaining = getRemainingAnalyses(freshUsage);
+    if (remaining <= 0) {
+      setUsage(freshUsage);
+      Alert.alert(
+        '本日の無料試合予想を使い切りました',
+        'リワード広告を見ると試合予想を1回追加できます。',
+        [
+          { text: 'あとで', style: 'cancel' },
+          { text: '広告を見て+1回', onPress: () => setShowRewardedAd(true) },
+        ]
+      );
+      return;
+    }
+
     setHomeFormation(home);
     setAwayFormation(away);
     setLoading(true);
@@ -104,6 +105,20 @@ export default function App() {
         home.players,
         away.players
       );
+
+      const consumed = await consumeAnalysisCredit();
+      if (!consumed) {
+        Alert.alert(
+          '本日の無料試合予想を使い切りました',
+          'リワード広告を見ると試合予想を1回追加できます。',
+          [
+            { text: 'あとで', style: 'cancel' },
+            { text: '広告を見て+1回', onPress: () => setShowRewardedAd(true) },
+          ]
+        );
+        setCurrentScreen('confirmation');
+        return;
+      }
 
       setPrediction(result);
       setCurrentScreen('prediction');
@@ -139,8 +154,6 @@ export default function App() {
           onProceed={handleHomeScreenProceed}
           remainingAnalyses={getRemainingAnalyses(usage)}
           dailyFreeLimit={DAILY_FREE_ANALYSIS_LIMIT}
-          onConsumeAnalysisCredit={consumeAnalysisCredit}
-          onRestoreAnalysisCredit={restoreAnalysisCredit}
           onRequestRewardedAd={() => setShowRewardedAd(true)}
         />
       )}
@@ -153,8 +166,6 @@ export default function App() {
           onBack={handleBackFromConfirmation}
           remainingAnalyses={getRemainingAnalyses(usage)}
           dailyFreeLimit={DAILY_FREE_ANALYSIS_LIMIT}
-          onConsumeAnalysisCredit={consumeAnalysisCredit}
-          onRestoreAnalysisCredit={restoreAnalysisCredit}
           onRequestRewardedAd={() => setShowRewardedAd(true)}
         />
       )}

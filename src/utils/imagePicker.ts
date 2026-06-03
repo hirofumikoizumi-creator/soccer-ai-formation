@@ -11,13 +11,14 @@ export interface PickedImage {
 
 async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<PickedImage> {
   const maxDimension = Math.max(asset.width || 0, asset.height || 0);
+  const targetMaxDimension = 3200;
   const resize =
-    maxDimension > 2600
+    maxDimension > targetMaxDimension
       ? {
           width:
             (asset.width || 0) >= (asset.height || 0)
-              ? 2600
-              : Math.round(((asset.width || 1) / (asset.height || 1)) * 2600),
+              ? targetMaxDimension
+              : Math.round(((asset.width || 1) / (asset.height || 1)) * targetMaxDimension),
         }
       : undefined;
 
@@ -26,7 +27,7 @@ async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<
     resize ? [{ resize }] : [],
     {
       base64: true,
-      compress: 0.94,
+      compress: 0.98,
       format: ImageManipulator.SaveFormat.JPEG,
     }
   );

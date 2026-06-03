@@ -23,8 +23,8 @@ export interface PredictionResult {
 
 const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
 const GEMINI_MODELS = [
-  process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.0-flash',
-  'gemini-2.5-flash',
+  process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash',
+  'gemini-2.0-flash',
 ];
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
@@ -150,18 +150,26 @@ export async function analyzeFormationImage(
   try {
     assertGeminiApiKey();
 
-    const prompt = `あなたはサッカーのフォーメーション画像を読む専門家です。
+    const prompt = `あなたはサッカーのフォーメーション画像、テレビ中継のスタメン表示、スマホのスクリーンショットを読む専門家です。
 アップロードされた${teamType === 'home' ? 'ホーム' : 'アウェイ'}チームの画像を解析してください。
-画像はスマートフォンのカメラ写真、スクリーンショット、斜め撮影、影、ぼけ、低解像度を含む可能性があります。
+画像はスマートフォンのカメラ写真、テレビ画面の撮影、WebページやSNSのスクリーンショット、縦長・横長、斜め撮影、影、反射、ぼけ、低解像度を含む可能性があります。
 
 必ず以下を抽出してください:
 1. チーム名。見えない場合は "${teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'}"。
 2. フォーメーション。文字が読めない場合でも、GKを除く10人の配置から "4-3-3", "4-2-3-1", "3-4-2-1" などを推定してください。
-3. 選手名。日本語、英語、ローマ字表記を読み取ってください。背番号だけの場合は選手名に含めないでください。
+3. 選手名。日本語、英語、ローマ字、カタカナ、漢字、ひらがな表記を読み取ってください。背番号だけの場合は選手名に含めないでください。
+
+読み取り手順:
+- まず画像全体の向き、ピッチ、選手名ラベル、ベンチや広告などの余計な文字を分離してください。
+- GK、DF、MF、FWのラインごとに人数を数え、フォーメーションを推定してください。
+- 選手名はピッチ上またはスタメン欄にある11名を優先してください。
+- テレビ画面の撮影では、傾きやモアレがあっても、読める名前を最大11名まで返してください。
+- スクリーンショットでは、フォーメーション図の名前とリスト表示の名前を照合してください。
 
 カメラ写真の場合は、画像全体の向きとピッチ上の上下左右を推定し、各ラインの人数からフォーメーションを判断してください。
 選手名が一部しか読めない場合も、読める名前だけ返してください。
 できるだけ短時間で判断し、推測できる場合は "未解析" ではなく最も可能性が高いフォーメーションを返してください。
+confidenceは0から1で、読み取り確信度を返してください。
 
 Markdown、説明文、コードブロックは絶対に含めないでください。`;
 
@@ -185,7 +193,7 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
         responseMimeType: 'application/json',
         responseSchema: FORMATION_RESPONSE_SCHEMA,
         candidateCount: 1,
-        maxOutputTokens: 512,
+        maxOutputTokens: 768,
         temperature: 0.1,
       },
     });
@@ -233,13 +241,17 @@ export async function predictMatchOutcome(
 アウェイの選手: ${awayPlayers.join(', ') || '不明'}
 
 必ず日本語で、具体的な試合展開、攻撃・守備の噛み合わせ、勝敗予測の理由を説明してください。
+戦術分析は300〜500文字にしてください。
+戦術分析では、必ず両チームのフォーメーションに言及してください。
+選手名が入力されている場合は、各チームから1〜3名ずつ自然に含めてください。
+選手名が不足している場合は無理に架空の名前を作らず、「中盤」「前線」「サイド」「最終ライン」など役割で説明してください。
 返答は有効なJSONのみで、この形式にしてください:
 {
   "predictedScore": "X-Y",
   "homeWinProbability": 0-100,
   "drawProbability": 0-100,
   "awayWinProbability": 0-100,
-  "tacticalAnalysis": "日本語の詳細な戦術分析"
+  "tacticalAnalysis": "300〜500文字の日本語の戦術分析"
 }
 
 重要: 3つの確率は必ず合計100にしてください。英語、Markdown、説明文、コードブロックは含めないでください。`;
@@ -258,7 +270,7 @@ export async function predictMatchOutcome(
         responseMimeType: 'application/json',
         responseSchema: PREDICTION_RESPONSE_SCHEMA,
         candidateCount: 1,
-        maxOutputTokens: 768,
+        maxOutputTokens: 1024,
         temperature: 0.2,
       },
     });

@@ -18,8 +18,6 @@ interface HomeScreenProps {
   onProceed: (homeFormation: FormationData, awayFormation: FormationData) => void;
   remainingAnalyses: number;
   dailyFreeLimit: number;
-  onConsumeAnalysisCredit: () => Promise<boolean>;
-  onRestoreAnalysisCredit: () => Promise<void>;
   onRequestRewardedAd: () => void;
 }
 
@@ -39,6 +37,14 @@ function createPendingFormation(
   };
 }
 
+function createManualFormation(teamType: 'home' | 'away'): FormationData {
+  return {
+    teamName: teamType === 'home' ? 'ホームチーム' : 'アウェイチーム',
+    formation: '4-2-3-1',
+    players: [],
+  };
+}
+
 function getAnalysisErrorMessage(error: unknown) {
   if (error instanceof Error && error.message) {
     return error.message;
@@ -51,8 +57,6 @@ export default function HomeScreen({
   onProceed,
   remainingAnalyses,
   dailyFreeLimit,
-  onConsumeAnalysisCredit,
-  onRestoreAnalysisCredit,
   onRequestRewardedAd,
 }: HomeScreenProps) {
   const [homeFormation, setHomeFormation] = useState<FormationData | null>(null);
@@ -61,7 +65,6 @@ export default function HomeScreen({
   const [analyzing, setAnalyzing] = useState<'home' | 'away' | null>(null);
 
   const handleSelectImage = async (teamType: 'home' | 'away') => {
-    let creditConsumed = false;
     try {
       const image = await pickImage();
       if (!image) {
@@ -82,20 +85,6 @@ export default function HomeScreen({
         setAwayFormation(pendingFormation);
       }
 
-      const canAnalyze = await onConsumeAnalysisCredit();
-      if (!canAnalyze) {
-        Alert.alert(
-          '本日の無料解析を使い切りました',
-          'リワード広告を見るとAI解析を1回追加できます。写真は登録済みなので、追加後にAI分析を押してください。',
-          [
-            { text: 'あとで', style: 'cancel' },
-            { text: '広告を見て+1回', onPress: onRequestRewardedAd },
-          ]
-        );
-        return;
-      }
-      creditConsumed = true;
-
       const analysis = await analyzeFormationImage(image.base64, teamType, image.mimeType);
 
       const formationData: FormationData = {
@@ -113,9 +102,6 @@ export default function HomeScreen({
         setAwayFormation(formationData);
       }
     } catch (error) {
-      if (creditConsumed) {
-        await onRestoreAnalysisCredit();
-      }
       Alert.alert(
         '画像を登録しました',
         `${getAnalysisErrorMessage(error)}\n\n確認画面でチーム名やフォーメーションを手入力できます。`
@@ -127,7 +113,6 @@ export default function HomeScreen({
   };
 
   const handleTakePhoto = async (teamType: 'home' | 'away') => {
-    let creditConsumed = false;
     try {
       const image = await takePhoto();
       if (!image) {
@@ -148,20 +133,6 @@ export default function HomeScreen({
         setAwayFormation(pendingFormation);
       }
 
-      const canAnalyze = await onConsumeAnalysisCredit();
-      if (!canAnalyze) {
-        Alert.alert(
-          '本日の無料解析を使い切りました',
-          'リワード広告を見るとAI解析を1回追加できます。写真は登録済みなので、追加後にAI分析を押してください。',
-          [
-            { text: 'あとで', style: 'cancel' },
-            { text: '広告を見て+1回', onPress: onRequestRewardedAd },
-          ]
-        );
-        return;
-      }
-      creditConsumed = true;
-
       const analysis = await analyzeFormationImage(image.base64, teamType, image.mimeType);
 
       const formationData: FormationData = {
@@ -179,9 +150,6 @@ export default function HomeScreen({
         setAwayFormation(formationData);
       }
     } catch (error) {
-      if (creditConsumed) {
-        await onRestoreAnalysisCredit();
-      }
       Alert.alert(
         '画像を登録しました',
         `${getAnalysisErrorMessage(error)}\n\n確認画面でチーム名やフォーメーションを手入力できます。`
@@ -194,32 +162,26 @@ export default function HomeScreen({
 
   const handleProceed = () => {
     if (!homeFormation || !awayFormation) {
-      Alert.alert('エラー', 'ホーム・アウェイ両方のフォーメーション画像を選択してください');
+      Alert.alert('エラー', 'ホーム・アウェイ両方のチーム情報を入力してください');
       return;
     }
     onProceed(homeFormation, awayFormation);
+  };
+
+  const handleManualInput = (teamType: 'home' | 'away') => {
+    const manualFormation = createManualFormation(teamType);
+    if (teamType === 'home') {
+      setHomeFormation(manualFormation);
+    } else {
+      setAwayFormation(manualFormation);
+    }
   };
 
   const handleAnalyzeExistingImage = async (
     teamType: 'home' | 'away',
     formation: FormationData
   ) => {
-    let creditConsumed = false;
     try {
-      const canAnalyze = await onConsumeAnalysisCredit();
-      if (!canAnalyze) {
-        Alert.alert(
-          '本日の無料解析を使い切りました',
-          'リワード広告を見るとAI解析を1回追加できます。',
-          [
-            { text: 'あとで', style: 'cancel' },
-            { text: '広告を見て+1回', onPress: onRequestRewardedAd },
-          ]
-        );
-        return;
-      }
-      creditConsumed = true;
-
       setAnalyzing(teamType);
       if (!formation.imageBase64) {
         throw new Error('画像データを再分析できませんでした。写真をもう一度選択してください');
@@ -245,9 +207,6 @@ export default function HomeScreen({
         setAwayFormation(formationData);
       }
     } catch (error) {
-      if (creditConsumed) {
-        await onRestoreAnalysisCredit();
-      }
       Alert.alert(
         'AI解析に失敗しました',
         `${getAnalysisErrorMessage(error)}\n\n確認画面でチーム名やフォーメーションを手入力できます。`
@@ -268,27 +227,36 @@ export default function HomeScreen({
           <View style={[styles.pitchLine, styles.pitchLineBottom]} />
           <View style={[styles.diagonalLine, styles.diagonalLeft]} />
           <View style={[styles.diagonalLine, styles.diagonalRight]} />
-          <Image
-            source={{ uri: formation.imageUri }}
-            style={styles.formationImage}
-            resizeMode="contain"
-          />
+          {formation.imageUri ? (
+            <Image
+              source={{ uri: formation.imageUri }}
+              style={styles.formationImage}
+              resizeMode="contain"
+            />
+          ) : (
+            <View style={styles.manualCard}>
+              <Text style={styles.manualCardTitle}>手入力モード</Text>
+              <Text style={styles.manualCardText}>次の画面でフォーメーションと11名を入力できます。</Text>
+            </View>
+          )}
         </View>
         <Text style={styles.teamName}>
-          {teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'}: Analyzed
+          {teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'}: {formation.imageUri ? 'AI読取済み' : '手入力'}
         </Text>
         <Text style={styles.formation}>フォーメーション: {formation.formation}</Text>
-        <TouchableOpacity
-          style={styles.changeButton}
-          onPress={() => handleAnalyzeExistingImage(teamType, formation)}
-          disabled={isAnalyzing}
-        >
-          {isAnalyzing ? (
-            <ActivityIndicator size="small" color={colors.goldBright} />
-          ) : (
-            <Text style={styles.buttonText}>AI分析</Text>
-          )}
-        </TouchableOpacity>
+        {formation.imageUri && (
+          <TouchableOpacity
+            style={styles.changeButton}
+            onPress={() => handleAnalyzeExistingImage(teamType, formation)}
+            disabled={isAnalyzing}
+          >
+            {isAnalyzing ? (
+              <ActivityIndicator size="small" color={colors.goldBright} />
+            ) : (
+              <Text style={styles.buttonText}>AI分析</Text>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
     );
   };
@@ -332,6 +300,17 @@ export default function HomeScreen({
             </>
           )}
         </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.uploadButton}
+          onPress={() => handleManualInput(teamType)}
+          disabled={isAnalyzing}
+        >
+          <Text style={styles.uploadIcon}>✎</Text>
+          <View style={styles.uploadTextBlock}>
+            <Text style={styles.uploadText}>自分で入力する</Text>
+            <Text style={styles.uploadSubText}>APIを使わず手入力で作成</Text>
+          </View>
+        </TouchableOpacity>
       </View>
     );
   };
@@ -356,17 +335,17 @@ export default function HomeScreen({
       </View>
 
       <View style={styles.usagePanel}>
-        <Text style={styles.usageTitle}>本日の無料AI解析</Text>
+        <Text style={styles.usageTitle}>本日の無料試合予想</Text>
         <Text style={styles.usageCount}>残り {remainingAnalyses} 回</Text>
         <Text style={styles.usageNote}>
-          無料は1日{dailyFreeLimit}回まで。無料分を使い切ったら広告視聴で1回追加できます。
+          無料は1日{dailyFreeLimit}試合まで。写真読み取りや手入力では消費せず、試合予想の生成成功時に1回消費します。
         </Text>
         <Text style={styles.reviewNote}>
-          広告を最後まで見るとAI解析を1回追加できます。写真はAI解析のため外部AIサービスへ送信される場合があります。
+          広告を最後まで見ると試合予想を1回追加できます。写真はAI解析のため外部AIサービスへ送信される場合があります。
         </Text>
         {remainingAnalyses <= 0 && (
           <TouchableOpacity style={styles.rewardButton} onPress={onRequestRewardedAd}>
-            <Text style={styles.rewardButtonText}>広告を見てAI解析を1回追加</Text>
+            <Text style={styles.rewardButtonText}>広告を見て試合予想を1回追加</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -511,6 +490,29 @@ const styles = StyleSheet.create({
     width: '86%',
     height: '92%',
     borderRadius: 4,
+  },
+  manualCard: {
+    width: '86%',
+    minHeight: 180,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 22,
+    backgroundColor: 'rgba(5, 17, 39, 0.74)',
+    borderWidth: 1,
+    borderColor: colors.gold,
+  },
+  manualCardTitle: {
+    color: colors.goldBright,
+    fontSize: 22,
+    fontWeight: '900',
+    marginBottom: 10,
+  },
+  manualCardText: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
   },
   pitchLine: {
     position: 'absolute',

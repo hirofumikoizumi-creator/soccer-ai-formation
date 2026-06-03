@@ -9,6 +9,8 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import type { FormationData } from '../types';
 import { analyzeFormationImage } from '../services/geminiService';
@@ -22,8 +24,6 @@ interface ConfirmationScreenProps {
   onBack: () => void;
   remainingAnalyses: number;
   dailyFreeLimit: number;
-  onConsumeAnalysisCredit: () => Promise<boolean>;
-  onRestoreAnalysisCredit: () => Promise<void>;
   onRequestRewardedAd: () => void;
 }
 
@@ -59,8 +59,6 @@ export default function ConfirmationScreen({
   onBack,
   remainingAnalyses,
   dailyFreeLimit,
-  onConsumeAnalysisCredit,
-  onRestoreAnalysisCredit,
   onRequestRewardedAd,
 }: ConfirmationScreenProps) {
   const [activeTeam, setActiveTeam] = useState<'home' | 'away'>('home');
@@ -86,7 +84,6 @@ export default function ConfirmationScreen({
     teamType: 'home' | 'away',
     source: 'library' | 'camera'
   ) => {
-    let creditConsumed = false;
     try {
       setReanalyzing(teamType);
       const image = source === 'library' ? await pickImage() : await takePhoto();
@@ -104,20 +101,6 @@ export default function ConfirmationScreen({
         setAwayMimeType(image.mimeType);
       }
 
-      const canAnalyze = await onConsumeAnalysisCredit();
-      if (!canAnalyze) {
-        Alert.alert(
-          '本日の無料解析を使い切りました',
-          'リワード広告を見るとAI解析を1回追加できます。写真は変更済みなので、追加後にもう一度AI分析してください。',
-          [
-            { text: 'あとで', style: 'cancel' },
-            { text: '広告を見て+1回', onPress: onRequestRewardedAd },
-          ]
-        );
-        return;
-      }
-      creditConsumed = true;
-
       const analysis = await analyzeFormationImage(image.base64, teamType, image.mimeType);
       if (teamType === 'home') {
         setHomeTeam(analysis.teamName);
@@ -129,9 +112,6 @@ export default function ConfirmationScreen({
         setAwayPlayers(createPlayerFields(analysis.players));
       }
     } catch (error) {
-      if (creditConsumed) {
-        await onRestoreAnalysisCredit();
-      }
       Alert.alert(
         '画像を変更しました',
         `${getAnalysisErrorMessage(error)}\n\n必要に応じてチーム名、フォーメーション、選手名を手入力してください。`
@@ -216,9 +196,16 @@ export default function ConfirmationScreen({
         <Text style={styles.sectionTitle}>{isHome ? 'ホームチーム' : 'アウェイチーム'}</Text>
 
         <View style={styles.teamPanel}>
-          <View style={styles.imageFrame}>
-            <Image source={{ uri: imageUri }} style={styles.formationImage} resizeMode="contain" />
-          </View>
+          {imageUri ? (
+            <View style={styles.imageFrame}>
+              <Image source={{ uri: imageUri }} style={styles.formationImage} resizeMode="contain" />
+            </View>
+          ) : (
+            <View style={styles.manualFrame}>
+              <Text style={styles.manualFrameTitle}>手入力で作成中</Text>
+              <Text style={styles.manualFrameText}>写真なしで、フォーメーションと選手名から試合予想を作成します。</Text>
+            </View>
+          )}
 
           <View style={styles.imageActions}>
             <TouchableOpacity
@@ -226,14 +213,14 @@ export default function ConfirmationScreen({
               onPress={() => handleReplaceImage(teamType, 'library')}
               disabled={isAnalyzing}
             >
-              <Text style={styles.secondaryButtonText}>写真を変更</Text>
+              <Text style={styles.secondaryButtonText}>写真を選んでAI読取</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.secondaryButton}
               onPress={() => handleReplaceImage(teamType, 'camera')}
               disabled={isAnalyzing}
             >
-              <Text style={styles.secondaryButtonText}>撮影してAI分析</Text>
+              <Text style={styles.secondaryButtonText}>撮影してAI読取</Text>
             </TouchableOpacity>
           </View>
           {isAnalyzing && (
@@ -286,86 +273,97 @@ export default function ConfirmationScreen({
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.backgroundAccent} />
-      <View style={styles.header}>
-        <Text style={styles.title}>情報確認</Text>
-        <Text style={styles.subtitle}>チームごとに情報を確認・修正してください</Text>
-      </View>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={12}
+    >
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
+        <View style={styles.backgroundAccent} />
+        <View style={styles.header}>
+          <Text style={styles.title}>情報確認</Text>
+          <Text style={styles.subtitle}>チームごとに情報を確認・修正してください</Text>
+        </View>
 
-      <View style={styles.usagePanel}>
-        <Text style={styles.usageTitle}>本日の無料AI解析</Text>
-        <Text style={styles.usageCount}>残り {remainingAnalyses} 回</Text>
-        <Text style={styles.usageNote}>
-          無料は1日{dailyFreeLimit}回まで。広告視聴で1回追加できます。
-        </Text>
-        <Text style={styles.reviewNote}>
-          広告を最後まで見るとAI解析を1回追加できます。写真はAI解析のため外部AIサービスへ送信される場合があります。
-        </Text>
-        {remainingAnalyses <= 0 && (
-          <TouchableOpacity style={styles.rewardButton} onPress={onRequestRewardedAd}>
-            <Text style={styles.rewardButtonText}>広告を見てAI解析を1回追加</Text>
+        <View style={styles.usagePanel}>
+          <Text style={styles.usageTitle}>本日の無料試合予想</Text>
+          <Text style={styles.usageCount}>残り {remainingAnalyses} 回</Text>
+          <Text style={styles.usageNote}>
+            写真の読み取りや手入力では消費せず、試合予想の生成成功時に1回消費します。無料は1日{dailyFreeLimit}試合までです。
+          </Text>
+          <Text style={styles.reviewNote}>
+            広告を最後まで見ると試合予想を1回追加できます。写真はAI解析のため外部AIサービスへ送信される場合があります。
+          </Text>
+          {remainingAnalyses <= 0 && (
+            <TouchableOpacity style={styles.rewardButton} onPress={onRequestRewardedAd}>
+              <Text style={styles.rewardButtonText}>広告を見て試合予想を1回追加</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.tabs}>
+          <TouchableOpacity
+            style={[styles.tab, activeTeam === 'home' && styles.tabActive]}
+            onPress={() => setActiveTeam('home')}
+          >
+            <Text style={[styles.tabText, activeTeam === 'home' && styles.tabTextActive]}>
+              ホーム
+            </Text>
           </TouchableOpacity>
-        )}
-      </View>
+          <TouchableOpacity
+            style={[styles.tab, activeTeam === 'away' && styles.tabActive]}
+            onPress={() => setActiveTeam('away')}
+          >
+            <Text style={[styles.tabText, activeTeam === 'away' && styles.tabTextActive]}>
+              アウェイ
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-      <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[styles.tab, activeTeam === 'home' && styles.tabActive]}
-          onPress={() => setActiveTeam('home')}
-        >
-          <Text style={[styles.tabText, activeTeam === 'home' && styles.tabTextActive]}>
-            ホーム
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTeam === 'away' && styles.tabActive]}
-          onPress={() => setActiveTeam('away')}
-        >
-          <Text style={[styles.tabText, activeTeam === 'away' && styles.tabTextActive]}>
-            アウェイ
-          </Text>
-        </TouchableOpacity>
-      </View>
+        {renderTeamPage(activeTeam)}
 
-      {renderTeamPage(activeTeam)}
+        <View style={styles.buttonContainer}>
+          {activeTeam === 'home' ? (
+            <>
+              <TouchableOpacity style={styles.backButton} onPress={onBack} disabled={loading}>
+                <Text style={styles.backButtonText}>戻る</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmButton}
+                onPress={() => setActiveTeam('away')}
+                disabled={loading}
+              >
+                <Text style={styles.confirmButtonText}>アウェイへ</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => setActiveTeam('home')}
+                disabled={loading}
+              >
+                <Text style={styles.backButtonText}>ホームへ</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm} disabled={loading}>
+                {loading ? (
+                  <ActivityIndicator size="small" color={colors.background} />
+                ) : (
+                  <Text style={styles.confirmButtonText}>AI分析</Text>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
 
-      <View style={styles.buttonContainer}>
-        {activeTeam === 'home' ? (
-          <>
-            <TouchableOpacity style={styles.backButton} onPress={onBack} disabled={loading}>
-              <Text style={styles.backButtonText}>戻る</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.confirmButton}
-              onPress={() => setActiveTeam('away')}
-              disabled={loading}
-            >
-              <Text style={styles.confirmButtonText}>アウェイへ</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => setActiveTeam('home')}
-              disabled={loading}
-            >
-              <Text style={styles.backButtonText}>ホームへ</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm} disabled={loading}>
-              {loading ? (
-                <ActivityIndicator size="small" color={colors.background} />
-              ) : (
-                <Text style={styles.confirmButtonText}>決定</Text>
-              )}
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
-
-      <View style={styles.spacer} />
-    </ScrollView>
+        <View style={styles.spacer} />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -375,7 +373,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {
-    paddingBottom: 18,
+    paddingBottom: 180,
   },
   backgroundAccent: {
     position: 'absolute',
@@ -500,6 +498,29 @@ const styles = StyleSheet.create({
   formationImage: {
     width: '100%',
     height: '100%',
+  },
+  manualFrame: {
+    minHeight: 170,
+    borderRadius: 12,
+    marginBottom: 12,
+    padding: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#06152c',
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+  },
+  manualFrameTitle: {
+    color: colors.goldBright,
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: 8,
+  },
+  manualFrameText: {
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
   },
   imageActions: {
     flexDirection: 'row',
