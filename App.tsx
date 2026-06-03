@@ -8,6 +8,14 @@ import AdPlaceholder from './src/components/AdPlaceholder';
 import { predictMatchOutcome } from './src/services/geminiService';
 import type { FormationData, PredictionData, AppScreen } from './src/types';
 import { colors } from './src/theme';
+import {
+  AnalysisUsage,
+  createEmptyUsage,
+  DAILY_FREE_ANALYSIS_LIMIT,
+  getRemainingAnalyses,
+  loadAnalysisUsage,
+  saveAnalysisUsage,
+} from './src/utils/analysisUsage';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<AppScreen>('home');
@@ -16,6 +24,43 @@ export default function App() {
   const [prediction, setPrediction] = useState<PredictionData | null>(null);
   const [loading, setLoading] = useState(false);
   const [showAd, setShowAd] = useState(false);
+  const [showRewardedAd, setShowRewardedAd] = useState(false);
+  const [usage, setUsage] = useState<AnalysisUsage>(createEmptyUsage());
+
+  React.useEffect(() => {
+    loadAnalysisUsage().then(setUsage);
+  }, []);
+
+  const persistUsage = async (nextUsage: AnalysisUsage) => {
+    setUsage(nextUsage);
+    await saveAnalysisUsage(nextUsage);
+  };
+
+  const consumeAnalysisCredit = async () => {
+    const freshUsage = await loadAnalysisUsage();
+    const remaining = getRemainingAnalyses(freshUsage);
+    if (remaining <= 0) {
+      setUsage(freshUsage);
+      return false;
+    }
+
+    const nextUsage = {
+      ...freshUsage,
+      used: freshUsage.used + 1,
+    };
+    await persistUsage(nextUsage);
+    return true;
+  };
+
+  const handleRewardEarned = async () => {
+    const freshUsage = await loadAnalysisUsage();
+    const nextUsage = {
+      ...freshUsage,
+      rewardedCredits: freshUsage.rewardedCredits + 1,
+    };
+    await persistUsage(nextUsage);
+    Alert.alert('解析回数を追加しました', 'AI解析を1回追加で利用できます。');
+  };
 
   const handleHomeScreenProceed = (home: FormationData, away: FormationData) => {
     setHomeFormation(home);
@@ -76,7 +121,13 @@ export default function App() {
       <StatusBar style="light" backgroundColor={colors.background} />
 
       {currentScreen === 'home' && (
-        <HomeScreen onProceed={handleHomeScreenProceed} />
+        <HomeScreen
+          onProceed={handleHomeScreenProceed}
+          remainingAnalyses={getRemainingAnalyses(usage)}
+          dailyFreeLimit={DAILY_FREE_ANALYSIS_LIMIT}
+          onConsumeAnalysisCredit={consumeAnalysisCredit}
+          onRequestRewardedAd={() => setShowRewardedAd(true)}
+        />
       )}
 
       {currentScreen === 'confirmation' && homeFormation && awayFormation && (
@@ -85,6 +136,10 @@ export default function App() {
           awayFormation={awayFormation}
           onConfirm={handleConfirmationConfirm}
           onBack={handleBackFromConfirmation}
+          remainingAnalyses={getRemainingAnalyses(usage)}
+          dailyFreeLimit={DAILY_FREE_ANALYSIS_LIMIT}
+          onConsumeAnalysisCredit={consumeAnalysisCredit}
+          onRequestRewardedAd={() => setShowRewardedAd(true)}
         />
       )}
 
@@ -104,6 +159,14 @@ export default function App() {
             />
           )}
         </View>
+      )}
+
+      {showRewardedAd && (
+        <AdPlaceholder
+          type="rewarded"
+          onRewardEarned={handleRewardEarned}
+          onAdClosed={() => setShowRewardedAd(false)}
+        />
       )}
     </View>
   );

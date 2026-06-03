@@ -1,26 +1,34 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { colors } from '../theme';
 
 interface AdPlaceholderProps {
-  type?: 'banner' | 'interstitial';
+  type?: 'banner' | 'interstitial' | 'rewarded';
   onAdClosed?: () => void;
+  onRewardEarned?: () => void;
 }
 
-const SAMURAI_BLUE = '#003F8F';
 const BANNER_AD_ID = process.env.EXPO_PUBLIC_ADMOB_BANNER_ID || 'ca-app-pub-5840457424714744/2191315578';
 const INTERSTITIAL_AD_ID =
   process.env.EXPO_PUBLIC_ADMOB_INTERSTITIAL_ID || 'ca-app-pub-5840457424714744/2994711458';
+const REWARDED_AD_ID =
+  process.env.EXPO_PUBLIC_ADMOB_REWARDED_ID || 'ca-app-pub-5840457424714744/2803510894';
 
-export default function AdPlaceholder({ type = 'banner', onAdClosed }: AdPlaceholderProps) {
+export default function AdPlaceholder({
+  type = 'banner',
+  onAdClosed,
+  onRewardEarned,
+}: AdPlaceholderProps) {
   const [adsModule, setAdsModule] = useState<any>(null);
   const [interstitialLoaded, setInterstitialLoaded] = useState(false);
+  const [rewardedLoaded, setRewardedLoaded] = useState(false);
 
   useEffect(() => {
     try {
       setAdsModule(require('react-native-google-mobile-ads'));
     } catch (error) {
       console.warn('Google Mobile Ads SDK is unavailable', error);
-      if (type === 'interstitial') {
+      if (type === 'interstitial' || type === 'rewarded') {
         onAdClosed?.();
       }
     }
@@ -32,6 +40,16 @@ export default function AdPlaceholder({ type = 'banner', onAdClosed }: AdPlaceho
     }
 
     return adsModule.InterstitialAd.createForAdRequest(INTERSTITIAL_AD_ID, {
+      requestNonPersonalizedAdsOnly: true,
+    });
+  }, [adsModule]);
+
+  const rewarded = useMemo(() => {
+    if (!adsModule) {
+      return null;
+    }
+
+    return adsModule.RewardedAd.createForAdRequest(REWARDED_AD_ID, {
       requestNonPersonalizedAdsOnly: true,
     });
   }, [adsModule]);
@@ -61,13 +79,56 @@ export default function AdPlaceholder({ type = 'banner', onAdClosed }: AdPlaceho
     }
   }, [adsModule, interstitial, type, onAdClosed]);
 
-  if (type === 'interstitial') {
+  useEffect(() => {
+    if (type === 'rewarded' && rewarded && adsModule) {
+      let rewardEarned = false;
+      const unsubscribeLoaded = rewarded.addAdEventListener(adsModule.RewardedAdEventType.LOADED, () => {
+        setRewardedLoaded(true);
+        rewarded.show();
+      });
+      const unsubscribeEarned = rewarded.addAdEventListener(
+        adsModule.RewardedAdEventType.EARNED_REWARD,
+        () => {
+          rewardEarned = true;
+          onRewardEarned?.();
+        }
+      );
+      const unsubscribeClosed = rewarded.addAdEventListener(adsModule.AdEventType.CLOSED, () => {
+        setRewardedLoaded(false);
+        if (!rewardEarned) {
+          onAdClosed?.();
+          return;
+        }
+        onAdClosed?.();
+      });
+      const unsubscribeError = rewarded.addAdEventListener(adsModule.AdEventType.ERROR, () => {
+        setRewardedLoaded(false);
+        onAdClosed?.();
+      });
+
+      rewarded.load();
+
+      return () => {
+        unsubscribeLoaded();
+        unsubscribeEarned();
+        unsubscribeClosed();
+        unsubscribeError();
+      };
+    }
+  }, [adsModule, rewarded, type, onAdClosed, onRewardEarned]);
+
+  if (type === 'interstitial' || type === 'rewarded') {
+    const isRewarded = type === 'rewarded';
+    const loaded = isRewarded ? rewardedLoaded : interstitialLoaded;
+
     return (
       <View style={styles.interstitialContainer}>
         <View style={styles.interstitialContent}>
-          <Text style={styles.adText}>広告を読み込み中...</Text>
+          <Text style={styles.adText}>
+            {isRewarded ? 'リワード広告を読み込み中...' : '広告を読み込み中...'}
+          </Text>
           <Text style={styles.adSubText}>
-            {interstitialLoaded ? '広告を表示しています' : 'しばらくお待ちください'}
+            {loaded ? '広告を表示しています' : 'しばらくお待ちください'}
           </Text>
         </View>
       </View>
@@ -101,9 +162,9 @@ const styles = StyleSheet.create({
   bannerContainer: {
     width: '100%',
     height: 50,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: colors.panel,
     borderTopWidth: 1,
-    borderTopColor: '#ddd',
+    borderTopColor: colors.borderSoft,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -113,25 +174,27 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(2, 8, 23, 0.86)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1000,
   },
   interstitialContent: {
-    backgroundColor: 'white',
+    backgroundColor: colors.panelElevated,
     borderRadius: 12,
     padding: 40,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   adText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: SAMURAI_BLUE,
+    color: colors.goldBright,
     marginBottom: 8,
   },
   adSubText: {
     fontSize: 12,
-    color: '#666',
+    color: colors.muted,
   },
 });
