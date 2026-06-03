@@ -11,7 +11,7 @@
     ],
     "ios": {
       "bundleIdentifier": "com.gsw.socceraiyosou",
-      "buildNumber": "11",
+      "buildNumber": "12",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }

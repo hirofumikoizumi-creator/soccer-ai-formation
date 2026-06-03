@@ -1,12 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import {
-  AdEventType,
-  BannerAd,
-  BannerAdSize,
-  InterstitialAd,
-  TestIds,
-} from 'react-native-google-mobile-ads';
 
 interface AdPlaceholderProps {
   type?: 'banner' | 'interstitial';
@@ -14,31 +7,45 @@ interface AdPlaceholderProps {
 }
 
 const SAMURAI_BLUE = '#003F8F';
-const BANNER_AD_ID = process.env.EXPO_PUBLIC_ADMOB_BANNER_ID || TestIds.BANNER;
 const INTERSTITIAL_AD_ID =
   process.env.EXPO_PUBLIC_ADMOB_INTERSTITIAL_ID || 'ca-app-pub-5840457424714744/2994711458';
 
 export default function AdPlaceholder({ type = 'banner', onAdClosed }: AdPlaceholderProps) {
+  const [adsModule, setAdsModule] = useState<any>(null);
   const [interstitialLoaded, setInterstitialLoaded] = useState(false);
-  const interstitial = useMemo(
-    () =>
-      InterstitialAd.createForAdRequest(INTERSTITIAL_AD_ID, {
-        requestNonPersonalizedAdsOnly: true,
-      }),
-    []
-  );
 
   useEffect(() => {
-    if (type === 'interstitial') {
-      const unsubscribeLoaded = interstitial.addAdEventListener(AdEventType.LOADED, () => {
+    try {
+      setAdsModule(require('react-native-google-mobile-ads'));
+    } catch (error) {
+      console.warn('Google Mobile Ads SDK is unavailable', error);
+      if (type === 'interstitial') {
+        onAdClosed?.();
+      }
+    }
+  }, [type, onAdClosed]);
+
+  const interstitial = useMemo(() => {
+    if (!adsModule) {
+      return null;
+    }
+
+    return adsModule.InterstitialAd.createForAdRequest(INTERSTITIAL_AD_ID, {
+      requestNonPersonalizedAdsOnly: true,
+    });
+  }, [adsModule]);
+
+  useEffect(() => {
+    if (type === 'interstitial' && interstitial && adsModule) {
+      const unsubscribeLoaded = interstitial.addAdEventListener(adsModule.AdEventType.LOADED, () => {
         setInterstitialLoaded(true);
         interstitial.show();
       });
-      const unsubscribeClosed = interstitial.addAdEventListener(AdEventType.CLOSED, () => {
+      const unsubscribeClosed = interstitial.addAdEventListener(adsModule.AdEventType.CLOSED, () => {
         setInterstitialLoaded(false);
         onAdClosed?.();
       });
-      const unsubscribeError = interstitial.addAdEventListener(AdEventType.ERROR, () => {
+      const unsubscribeError = interstitial.addAdEventListener(adsModule.AdEventType.ERROR, () => {
         setInterstitialLoaded(false);
         onAdClosed?.();
       });
@@ -51,7 +58,7 @@ export default function AdPlaceholder({ type = 'banner', onAdClosed }: AdPlaceho
         unsubscribeError();
       };
     }
-  }, [interstitial, type, onAdClosed]);
+  }, [adsModule, interstitial, type, onAdClosed]);
 
   if (type === 'interstitial') {
     return (
@@ -66,11 +73,22 @@ export default function AdPlaceholder({ type = 'banner', onAdClosed }: AdPlaceho
     );
   }
 
+  if (!adsModule) {
+    return (
+      <View style={styles.bannerContainer}>
+        <Text style={styles.adSubText}>広告を準備中...</Text>
+      </View>
+    );
+  }
+
+  const BannerAd = adsModule.BannerAd;
+  const bannerAdId = process.env.EXPO_PUBLIC_ADMOB_BANNER_ID || adsModule.TestIds.BANNER;
+
   return (
     <View style={styles.bannerContainer}>
       <BannerAd
-        unitId={BANNER_AD_ID}
-        size={BannerAdSize.BANNER}
+        unitId={bannerAdId}
+        size={adsModule.BannerAdSize.BANNER}
         requestOptions={{
           requestNonPersonalizedAdsOnly: true,
         }}
