@@ -23,6 +23,7 @@ interface ConfirmationScreenProps {
   remainingAnalyses: number;
   dailyFreeLimit: number;
   onConsumeAnalysisCredit: () => Promise<boolean>;
+  onRestoreAnalysisCredit: () => Promise<void>;
   onRequestRewardedAd: () => void;
 }
 
@@ -59,6 +60,7 @@ export default function ConfirmationScreen({
   remainingAnalyses,
   dailyFreeLimit,
   onConsumeAnalysisCredit,
+  onRestoreAnalysisCredit,
   onRequestRewardedAd,
 }: ConfirmationScreenProps) {
   const [activeTeam, setActiveTeam] = useState<'home' | 'away'>('home');
@@ -80,6 +82,7 @@ export default function ConfirmationScreen({
     teamType: 'home' | 'away',
     source: 'library' | 'camera'
   ) => {
+    let creditConsumed = false;
     try {
       setReanalyzing(teamType);
       const image = source === 'library' ? await pickImage() : await takePhoto();
@@ -105,6 +108,7 @@ export default function ConfirmationScreen({
         );
         return;
       }
+      creditConsumed = true;
 
       const analysis = await analyzeFormationImage(image.base64, teamType, image.mimeType);
       if (teamType === 'home') {
@@ -117,6 +121,9 @@ export default function ConfirmationScreen({
         setAwayPlayers(createPlayerFields(analysis.players));
       }
     } catch (error) {
+      if (creditConsumed) {
+        await onRestoreAnalysisCredit();
+      }
       Alert.alert(
         '画像を変更しました',
         `${getAnalysisErrorMessage(error)}\n\n必要に応じてチーム名、フォーメーション、選手名を手入力してください。`
@@ -280,6 +287,9 @@ export default function ConfirmationScreen({
         <Text style={styles.usageNote}>
           無料は1日{dailyFreeLimit}回まで。広告視聴で1回追加できます。
         </Text>
+        <Text style={styles.reviewNote}>
+          広告を最後まで見るとAI解析を1回追加できます。写真はAI解析のため外部AIサービスへ送信される場合があります。
+        </Text>
         {remainingAnalyses <= 0 && (
           <TouchableOpacity style={styles.rewardButton} onPress={onRequestRewardedAd}>
             <Text style={styles.rewardButtonText}>広告を見てAI解析を1回追加</Text>
@@ -405,6 +415,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 5,
     lineHeight: 18,
+  },
+  reviewNote: {
+    color: colors.muted,
+    fontSize: 11,
+    marginTop: 8,
+    lineHeight: 17,
   },
   rewardButton: {
     marginTop: 12,

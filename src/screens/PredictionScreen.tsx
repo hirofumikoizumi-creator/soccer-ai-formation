@@ -152,6 +152,13 @@ export default function PredictionScreen({
         <AdPlaceholder type="banner" />
       </View>
 
+      <View style={styles.noticeBox}>
+        <Text style={styles.noticeTitle}>ご利用上の注意</Text>
+        <Text style={styles.noticeText}>
+          この予測はAIによる参考情報です。実際の試合結果を保証するものではなく、賭けや金銭的判断を推奨するものではありません。
+        </Text>
+      </View>
+
       {/* Reset Button */}
       <TouchableOpacity style={styles.resetButton} onPress={onReset}>
         <Text style={styles.resetButtonText}>新しい予想を作成</Text>
@@ -334,6 +341,26 @@ const styles = StyleSheet.create({
   },
   adContainer: {
     marginVertical: 16,
+  },
+  noticeBox: {
+    marginHorizontal: 20,
+    marginTop: 4,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: 'rgba(9, 24, 52, 0.86)',
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+  },
+  noticeTitle: {
+    color: colors.goldBright,
+    fontSize: 13,
+    fontWeight: '900',
+    marginBottom: 6,
+  },
+  noticeText: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 18,
   },
   resetButton: {
     backgroundColor: colors.gold,

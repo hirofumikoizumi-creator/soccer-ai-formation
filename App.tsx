@@ -52,6 +52,20 @@ export default function App() {
     return true;
   };
 
+  const restoreAnalysisCredit = async () => {
+    const freshUsage = await loadAnalysisUsage();
+    if (freshUsage.used <= 0) {
+      setUsage(freshUsage);
+      return;
+    }
+
+    const nextUsage = {
+      ...freshUsage,
+      used: freshUsage.used - 1,
+    };
+    await persistUsage(nextUsage);
+  };
+
   const handleRewardEarned = async () => {
     const freshUsage = await loadAnalysisUsage();
     const nextUsage = {
@@ -126,6 +140,7 @@ export default function App() {
           remainingAnalyses={getRemainingAnalyses(usage)}
           dailyFreeLimit={DAILY_FREE_ANALYSIS_LIMIT}
           onConsumeAnalysisCredit={consumeAnalysisCredit}
+          onRestoreAnalysisCredit={restoreAnalysisCredit}
           onRequestRewardedAd={() => setShowRewardedAd(true)}
         />
       )}
@@ -139,6 +154,7 @@ export default function App() {
           remainingAnalyses={getRemainingAnalyses(usage)}
           dailyFreeLimit={DAILY_FREE_ANALYSIS_LIMIT}
           onConsumeAnalysisCredit={consumeAnalysisCredit}
+          onRestoreAnalysisCredit={restoreAnalysisCredit}
           onRequestRewardedAd={() => setShowRewardedAd(true)}
         />
       )}

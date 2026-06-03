@@ -20,6 +20,7 @@ interface HomeScreenProps {
   remainingAnalyses: number;
   dailyFreeLimit: number;
   onConsumeAnalysisCredit: () => Promise<boolean>;
+  onRestoreAnalysisCredit: () => Promise<void>;
   onRequestRewardedAd: () => void;
 }
 
@@ -45,6 +46,7 @@ export default function HomeScreen({
   remainingAnalyses,
   dailyFreeLimit,
   onConsumeAnalysisCredit,
+  onRestoreAnalysisCredit,
   onRequestRewardedAd,
 }: HomeScreenProps) {
   const [homeFormation, setHomeFormation] = useState<FormationData | null>(null);
@@ -53,6 +55,7 @@ export default function HomeScreen({
   const [analyzing, setAnalyzing] = useState<'home' | 'away' | null>(null);
 
   const handleSelectImage = async (teamType: 'home' | 'away') => {
+    let creditConsumed = false;
     try {
       const image = await pickImage();
       if (!image) {
@@ -80,6 +83,7 @@ export default function HomeScreen({
         );
         return;
       }
+      creditConsumed = true;
 
       const analysis = await analyzeFormationImage(image.base64, teamType, image.mimeType);
 
@@ -96,6 +100,9 @@ export default function HomeScreen({
         setAwayFormation(formationData);
       }
     } catch (error) {
+      if (creditConsumed) {
+        await onRestoreAnalysisCredit();
+      }
       Alert.alert(
         '画像を登録しました',
         `${getAnalysisErrorMessage(error)}\n\n確認画面でチーム名やフォーメーションを手入力できます。`
@@ -107,6 +114,7 @@ export default function HomeScreen({
   };
 
   const handleTakePhoto = async (teamType: 'home' | 'away') => {
+    let creditConsumed = false;
     try {
       const image = await takePhoto();
       if (!image) {
@@ -134,6 +142,7 @@ export default function HomeScreen({
         );
         return;
       }
+      creditConsumed = true;
 
       const analysis = await analyzeFormationImage(image.base64, teamType, image.mimeType);
 
@@ -150,6 +159,9 @@ export default function HomeScreen({
         setAwayFormation(formationData);
       }
     } catch (error) {
+      if (creditConsumed) {
+        await onRestoreAnalysisCredit();
+      }
       Alert.alert(
         '画像を登録しました',
         `${getAnalysisErrorMessage(error)}\n\n確認画面でチーム名やフォーメーションを手入力できます。`
@@ -172,6 +184,7 @@ export default function HomeScreen({
     teamType: 'home' | 'away',
     formation: FormationData
   ) => {
+    let creditConsumed = false;
     try {
       const canAnalyze = await onConsumeAnalysisCredit();
       if (!canAnalyze) {
@@ -185,6 +198,7 @@ export default function HomeScreen({
         );
         return;
       }
+      creditConsumed = true;
 
       setAnalyzing(teamType);
       const base64 = await FileSystem.readAsStringAsync(formation.imageUri, {
@@ -204,6 +218,9 @@ export default function HomeScreen({
         setAwayFormation(formationData);
       }
     } catch (error) {
+      if (creditConsumed) {
+        await onRestoreAnalysisCredit();
+      }
       Alert.alert(
         'AI解析に失敗しました',
         `${getAnalysisErrorMessage(error)}\n\n確認画面でチーム名やフォーメーションを手入力できます。`
@@ -316,6 +333,9 @@ export default function HomeScreen({
         <Text style={styles.usageCount}>残り {remainingAnalyses} 回</Text>
         <Text style={styles.usageNote}>
           無料は1日{dailyFreeLimit}回まで。無料分を使い切ったら広告視聴で1回追加できます。
+        </Text>
+        <Text style={styles.reviewNote}>
+          広告を最後まで見るとAI解析を1回追加できます。写真はAI解析のため外部AIサービスへ送信される場合があります。
         </Text>
         {remainingAnalyses <= 0 && (
           <TouchableOpacity style={styles.rewardButton} onPress={onRequestRewardedAd}>
@@ -581,6 +601,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 5,
     lineHeight: 18,
+  },
+  reviewNote: {
+    color: colors.muted,
+    fontSize: 11,
+    marginTop: 8,
+    lineHeight: 17,
   },
   rewardButton: {
     marginTop: 12,
