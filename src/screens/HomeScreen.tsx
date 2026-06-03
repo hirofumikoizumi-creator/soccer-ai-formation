@@ -12,12 +12,11 @@ import {
 import { pickImage, takePhoto } from '../utils/imagePicker';
 import { analyzeFormationImage } from '../services/geminiService';
 import type { FormationData } from '../types';
+import { colors, shadows } from '../theme';
 
 interface HomeScreenProps {
   onProceed: (homeFormation: FormationData, awayFormation: FormationData) => void;
 }
-
-const SAMURAI_BLUE = '#003F8F';
 
 function createPendingFormation(teamType: 'home' | 'away', imageUri: string): FormationData {
   return {
@@ -132,122 +131,107 @@ export default function HomeScreen({ onProceed }: HomeScreenProps) {
     onProceed(homeFormation, awayFormation);
   };
 
+  const renderTeamCard = (teamType: 'home' | 'away', formation: FormationData) => {
+    const isAnalyzing = analyzing === teamType;
+
+    return (
+      <View style={styles.formationCard}>
+        <View style={styles.pitchGlow}>
+          <View style={[styles.pitchLine, styles.pitchLineTop]} />
+          <View style={[styles.pitchLine, styles.pitchLineBottom]} />
+          <View style={[styles.diagonalLine, styles.diagonalLeft]} />
+          <View style={[styles.diagonalLine, styles.diagonalRight]} />
+          <Image
+            source={{ uri: formation.imageUri }}
+            style={styles.formationImage}
+            resizeMode="contain"
+          />
+        </View>
+        <Text style={styles.teamName}>
+          {teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'}: Analyzed
+        </Text>
+        <Text style={styles.formation}>フォーメーション: {formation.formation}</Text>
+        <TouchableOpacity
+          style={styles.changeButton}
+          onPress={() => handleSelectImage(teamType)}
+          disabled={isAnalyzing}
+        >
+          {isAnalyzing ? (
+            <ActivityIndicator size="small" color={colors.goldBright} />
+          ) : (
+            <Text style={styles.buttonText}>再計算</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderUploadButtons = (teamType: 'home' | 'away') => {
+    const isAnalyzing = analyzing === teamType;
+
+    return (
+      <View style={styles.uploadPlaceholder}>
+        <TouchableOpacity
+          style={styles.uploadButton}
+          onPress={() => handleSelectImage(teamType)}
+          disabled={isAnalyzing}
+        >
+          {isAnalyzing ? (
+            <ActivityIndicator size="small" color={colors.goldBright} />
+          ) : (
+            <>
+              <Text style={styles.uploadIcon}>▣</Text>
+              <Text style={styles.uploadText}>Select from Gallery</Text>
+            </>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.uploadButton}
+          onPress={() => handleTakePhoto(teamType)}
+          disabled={isAnalyzing}
+        >
+          {isAnalyzing ? (
+            <ActivityIndicator size="small" color={colors.goldBright} />
+          ) : (
+            <>
+              <Text style={styles.uploadIcon}>◉</Text>
+              <Text style={styles.uploadText}>Capture with Camera</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>サッカーAI試合予想</Text>
-        <Text style={styles.subtitle}>フォーメーション画像をアップロード</Text>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <View style={styles.backgroundAccent} />
+      <View style={styles.patternBlock}>
+        <View style={[styles.patternLine, styles.patternLineOne]} />
+        <View style={[styles.patternLine, styles.patternLineTwo]} />
+        <View style={[styles.patternLine, styles.patternLineThree]} />
       </View>
 
-      {/* Home Team Section */}
+      <View style={styles.header}>
+        <View style={styles.logo}>
+          <Text style={styles.logoText}>⚽</Text>
+        </View>
+        <View style={styles.headerText}>
+          <Text style={styles.title}>サッカーAI予想シミュレーション</Text>
+          <Text style={styles.subtitle}>Formation Analysis</Text>
+        </View>
+      </View>
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>ホームチーム</Text>
-        {homeFormation ? (
-          <View style={styles.formationCard}>
-            <Image
-              source={{ uri: homeFormation.imageUri }}
-              style={styles.formationImage}
-              resizeMode="contain"
-            />
-            <Text style={styles.teamName}>{homeFormation.teamName}</Text>
-            <Text style={styles.formation}>フォーメーション: {homeFormation.formation}</Text>
-            <TouchableOpacity
-              style={styles.changeButton}
-              onPress={() => handleSelectImage('home')}
-              disabled={analyzing === 'home'}
-            >
-              <Text style={styles.buttonText}>変更</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.uploadPlaceholder}>
-            <TouchableOpacity
-              style={styles.uploadButton}
-              onPress={() => handleSelectImage('home')}
-              disabled={analyzing === 'home'}
-            >
-              {analyzing === 'home' ? (
-                <ActivityIndicator size="large" color={SAMURAI_BLUE} />
-              ) : (
-                <>
-                  <Text style={styles.uploadIcon}>📷</Text>
-                  <Text style={styles.uploadText}>ギャラリーから選択</Text>
-                </>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.uploadButton}
-              onPress={() => handleTakePhoto('home')}
-              disabled={analyzing === 'home'}
-            >
-              {analyzing === 'home' ? (
-                <ActivityIndicator size="large" color={SAMURAI_BLUE} />
-              ) : (
-                <>
-                  <Text style={styles.uploadIcon}>📸</Text>
-                  <Text style={styles.uploadText}>カメラで撮影</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
+        {homeFormation ? renderTeamCard('home', homeFormation) : renderUploadButtons('home')}
       </View>
 
-      {/* Away Team Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>アウェイチーム</Text>
-        {awayFormation ? (
-          <View style={styles.formationCard}>
-            <Image
-              source={{ uri: awayFormation.imageUri }}
-              style={styles.formationImage}
-              resizeMode="contain"
-            />
-            <Text style={styles.teamName}>{awayFormation.teamName}</Text>
-            <Text style={styles.formation}>フォーメーション: {awayFormation.formation}</Text>
-            <TouchableOpacity
-              style={styles.changeButton}
-              onPress={() => handleSelectImage('away')}
-              disabled={analyzing === 'away'}
-            >
-              <Text style={styles.buttonText}>変更</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.uploadPlaceholder}>
-            <TouchableOpacity
-              style={styles.uploadButton}
-              onPress={() => handleSelectImage('away')}
-              disabled={analyzing === 'away'}
-            >
-              {analyzing === 'away' ? (
-                <ActivityIndicator size="large" color={SAMURAI_BLUE} />
-              ) : (
-                <>
-                  <Text style={styles.uploadIcon}>📷</Text>
-                  <Text style={styles.uploadText}>ギャラリーから選択</Text>
-                </>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.uploadButton}
-              onPress={() => handleTakePhoto('away')}
-              disabled={analyzing === 'away'}
-            >
-              {analyzing === 'away' ? (
-                <ActivityIndicator size="large" color={SAMURAI_BLUE} />
-              ) : (
-                <>
-                  <Text style={styles.uploadIcon}>📸</Text>
-                  <Text style={styles.uploadText}>カメラで撮影</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
+        {awayFormation ? renderTeamCard('away', awayFormation) : renderUploadButtons('away')}
       </View>
 
-      {/* Proceed Button */}
       {homeFormation && awayFormation && (
         <TouchableOpacity
           style={styles.proceedButton}
@@ -270,107 +254,208 @@ export default function HomeScreen({ onProceed }: HomeScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background,
+  },
+  content: {
+    paddingBottom: 18,
   },
   header: {
-    backgroundColor: SAMURAI_BLUE,
-    padding: 20,
-    paddingTop: 40,
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 44,
+    paddingBottom: 22,
+    gap: 14,
+  },
+  backgroundAccent: {
+    position: 'absolute',
+    top: -90,
+    right: -70,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(77, 183, 255, 0.12)',
+  },
+  patternBlock: {
+    position: 'absolute',
+    top: 116,
+    right: -40,
+    width: 230,
+    height: 210,
+    opacity: 0.42,
+  },
+  patternLine: {
+    position: 'absolute',
+    width: 260,
+    height: 1,
+    backgroundColor: colors.borderSoft,
+  },
+  patternLineOne: {
+    top: 20,
+    transform: [{ rotate: '32deg' }],
+  },
+  patternLineTwo: {
+    top: 86,
+    transform: [{ rotate: '-26deg' }],
+  },
+  patternLineThree: {
+    top: 146,
+    transform: [{ rotate: '32deg' }],
+  },
+  logo: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.panelElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  logoText: {
+    fontSize: 39,
+  },
+  headerText: {
+    flex: 1,
   },
   title: {
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 8,
+    color: colors.goldBright,
+    lineHeight: 27,
   },
   subtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 17,
+    color: colors.text,
+    marginTop: 3,
   },
   section: {
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: SAMURAI_BLUE,
+    fontSize: 21,
+    fontWeight: '800',
+    color: colors.goldBright,
     marginBottom: 12,
   },
   formationCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
+    backgroundColor: colors.panelSoft,
+    borderRadius: 18,
     padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.panel,
+  },
+  pitchGlow: {
+    height: 420,
+    borderRadius: 12,
+    marginBottom: 14,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#06152c',
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
   },
   formationImage: {
-    width: '100%',
-    height: 360,
-    borderRadius: 8,
-    marginBottom: 12,
-    backgroundColor: '#f0f0f0',
+    width: '86%',
+    height: '92%',
+    borderRadius: 4,
+  },
+  pitchLine: {
+    position: 'absolute',
+    width: 270,
+    height: 1,
+    backgroundColor: 'rgba(244, 221, 160, 0.34)',
+  },
+  pitchLineTop: {
+    top: 84,
+    transform: [{ rotate: '-31deg' }],
+  },
+  pitchLineBottom: {
+    bottom: 92,
+    transform: [{ rotate: '31deg' }],
+  },
+  diagonalLine: {
+    position: 'absolute',
+    width: 330,
+    height: 1,
+    backgroundColor: 'rgba(77, 183, 255, 0.24)',
+  },
+  diagonalLeft: {
+    transform: [{ rotate: '52deg' }],
+  },
+  diagonalRight: {
+    transform: [{ rotate: '-52deg' }],
   },
   teamName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.goldBright,
     marginBottom: 4,
   },
   formation: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 15,
+    color: colors.text,
     marginBottom: 12,
   },
   changeButton: {
-    backgroundColor: SAMURAI_BLUE,
+    backgroundColor: 'rgba(3, 13, 32, 0.72)',
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 6,
+    borderRadius: 8,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.gold,
   },
   buttonText: {
-    color: 'white',
-    fontWeight: '600',
-    fontSize: 14,
+    color: colors.goldBright,
+    fontWeight: '800',
+    fontSize: 20,
   },
   uploadPlaceholder: {
-    backgroundColor: 'white',
-    borderRadius: 12,
+    backgroundColor: colors.panelSoft,
+    borderRadius: 18,
     padding: 16,
     gap: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.panel,
   },
   uploadButton: {
-    backgroundColor: 'white',
-    borderWidth: 2,
-    borderColor: SAMURAI_BLUE,
-    borderRadius: 8,
+    flexDirection: 'row',
+    backgroundColor: 'rgba(9, 24, 52, 0.92)',
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    borderRadius: 9,
     paddingVertical: 16,
+    paddingHorizontal: 18,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
+    gap: 16,
   },
   uploadIcon: {
-    fontSize: 32,
-    marginBottom: 8,
+    width: 46,
+    color: colors.goldBright,
+    fontSize: 30,
+    textAlign: 'center',
   },
   uploadText: {
-    color: SAMURAI_BLUE,
-    fontWeight: '600',
-    fontSize: 14,
+    color: colors.text,
+    fontWeight: '700',
+    fontSize: 18,
   },
   proceedButton: {
-    backgroundColor: SAMURAI_BLUE,
-    marginHorizontal: 16,
+    backgroundColor: colors.gold,
+    marginHorizontal: 20,
     marginVertical: 20,
     paddingVertical: 16,
     borderRadius: 8,
     alignItems: 'center',
   },
   proceedButtonText: {
-    color: 'white',
+    color: colors.background,
     fontWeight: 'bold',
     fontSize: 16,
   },

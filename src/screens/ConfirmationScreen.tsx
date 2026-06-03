@@ -13,6 +13,7 @@ import {
 import type { FormationData } from '../types';
 import { analyzeFormationImage } from '../services/geminiService';
 import { pickImage, takePhoto } from '../utils/imagePicker';
+import { colors, shadows } from '../theme';
 
 interface ConfirmationScreenProps {
   homeFormation: FormationData;
@@ -20,8 +21,6 @@ interface ConfirmationScreenProps {
   onConfirm: (home: FormationData, away: FormationData) => void;
   onBack: () => void;
 }
-
-const SAMURAI_BLUE = '#003F8F';
 
 export default function ConfirmationScreen({
   homeFormation,
@@ -113,137 +112,149 @@ export default function ConfirmationScreen({
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <View style={styles.backgroundAccent} />
       <View style={styles.header}>
         <Text style={styles.title}>情報確認</Text>
         <Text style={styles.subtitle}>チーム情報を確認・修正してください</Text>
       </View>
 
-      {/* Home Team Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>ホームチーム</Text>
 
-        <Image
-          source={{ uri: homeImageUri }}
-          style={styles.formationImage}
-          resizeMode="contain"
-        />
-        <View style={styles.imageActions}>
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => handleReplaceImage('home', 'library')}
-            disabled={reanalyzing === 'home'}
-          >
-            <Text style={styles.secondaryButtonText}>ホーム写真を変更</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => handleReplaceImage('home', 'camera')}
-            disabled={reanalyzing === 'home'}
-          >
-            <Text style={styles.secondaryButtonText}>ホームを撮影</Text>
-          </TouchableOpacity>
-        </View>
-        {reanalyzing === 'home' && (
-          <ActivityIndicator size="small" color={SAMURAI_BLUE} style={styles.inlineLoader} />
-        )}
+        <View style={styles.teamPanel}>
+          <View style={styles.imageFrame}>
+            <Image
+              source={{ uri: homeImageUri }}
+              style={styles.formationImage}
+              resizeMode="contain"
+            />
+          </View>
+          <View style={styles.imageActions}>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => handleReplaceImage('home', 'library')}
+              disabled={reanalyzing === 'home'}
+            >
+              <Text style={styles.secondaryButtonText}>写真を変更</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => handleReplaceImage('home', 'camera')}
+              disabled={reanalyzing === 'home'}
+            >
+              <Text style={styles.secondaryButtonText}>撮影</Text>
+            </TouchableOpacity>
+          </View>
+          {reanalyzing === 'home' && (
+            <ActivityIndicator size="small" color={colors.goldBright} style={styles.inlineLoader} />
+          )}
 
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>チーム名</Text>
-          <TextInput
-            style={styles.input}
-            value={homeTeam}
-            onChangeText={setHomeTeam}
-            placeholder="チーム名を入力"
-          />
-        </View>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>チーム名</Text>
+            <TextInput
+              style={styles.input}
+              value={homeTeam}
+              onChangeText={setHomeTeam}
+              placeholder="チーム名を入力"
+              placeholderTextColor={colors.dim}
+            />
+          </View>
 
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>フォーメーション</Text>
-          <TextInput
-            style={styles.input}
-            value={homeFormationStr}
-            onChangeText={setHomeFormationStr}
-            placeholder="例: 4-3-3"
-          />
-        </View>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>フォーメーション</Text>
+            <TextInput
+              style={styles.input}
+              value={homeFormationStr}
+              onChangeText={setHomeFormationStr}
+              placeholder="例: 4-3-3"
+              placeholderTextColor={colors.dim}
+            />
+          </View>
 
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>選手名（1行1人）</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={homePlayers}
-            onChangeText={setHomePlayers}
-            placeholder="選手1&#10;選手2&#10;選手3..."
-            multiline
-            numberOfLines={6}
-          />
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>選手名（1行1人）</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={homePlayers}
+              onChangeText={setHomePlayers}
+              placeholder="選手1&#10;選手2&#10;選手3..."
+              placeholderTextColor={colors.dim}
+              multiline
+              numberOfLines={6}
+            />
+          </View>
         </View>
       </View>
 
-      {/* Away Team Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>アウェイチーム</Text>
 
-        <Image
-          source={{ uri: awayImageUri }}
-          style={styles.formationImage}
-          resizeMode="contain"
-        />
-        <View style={styles.imageActions}>
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => handleReplaceImage('away', 'library')}
-            disabled={reanalyzing === 'away'}
-          >
-            <Text style={styles.secondaryButtonText}>アウェイ写真を変更</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => handleReplaceImage('away', 'camera')}
-            disabled={reanalyzing === 'away'}
-          >
-            <Text style={styles.secondaryButtonText}>アウェイを撮影</Text>
-          </TouchableOpacity>
-        </View>
-        {reanalyzing === 'away' && (
-          <ActivityIndicator size="small" color={SAMURAI_BLUE} style={styles.inlineLoader} />
-        )}
+        <View style={styles.teamPanel}>
+          <View style={styles.imageFrame}>
+            <Image
+              source={{ uri: awayImageUri }}
+              style={styles.formationImage}
+              resizeMode="contain"
+            />
+          </View>
+          <View style={styles.imageActions}>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => handleReplaceImage('away', 'library')}
+              disabled={reanalyzing === 'away'}
+            >
+              <Text style={styles.secondaryButtonText}>写真を変更</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => handleReplaceImage('away', 'camera')}
+              disabled={reanalyzing === 'away'}
+            >
+              <Text style={styles.secondaryButtonText}>撮影</Text>
+            </TouchableOpacity>
+          </View>
+          {reanalyzing === 'away' && (
+            <ActivityIndicator size="small" color={colors.goldBright} style={styles.inlineLoader} />
+          )}
 
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>チーム名</Text>
-          <TextInput
-            style={styles.input}
-            value={awayTeam}
-            onChangeText={setAwayTeam}
-            placeholder="チーム名を入力"
-          />
-        </View>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>チーム名</Text>
+            <TextInput
+              style={styles.input}
+              value={awayTeam}
+              onChangeText={setAwayTeam}
+              placeholder="チーム名を入力"
+              placeholderTextColor={colors.dim}
+            />
+          </View>
 
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>フォーメーション</Text>
-          <TextInput
-            style={styles.input}
-            value={awayFormationStr}
-            onChangeText={setAwayFormationStr}
-            placeholder="例: 4-2-3-1"
-          />
-        </View>
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>フォーメーション</Text>
+            <TextInput
+              style={styles.input}
+              value={awayFormationStr}
+              onChangeText={setAwayFormationStr}
+              placeholder="例: 4-2-3-1"
+              placeholderTextColor={colors.dim}
+            />
+          </View>
 
-        <View style={styles.formGroup}>
-          <Text style={styles.label}>選手名（1行1人）</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={awayPlayers}
-            onChangeText={setAwayPlayers}
-            placeholder="選手1&#10;選手2&#10;選手3..."
-            multiline
-            numberOfLines={6}
-          />
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>選手名（1行1人）</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={awayPlayers}
+              onChangeText={setAwayPlayers}
+              placeholder="選手1&#10;選手2&#10;選手3..."
+              placeholderTextColor={colors.dim}
+              multiline
+              numberOfLines={6}
+            />
+          </View>
         </View>
       </View>
 
-      {/* Action Buttons */}
       <View style={styles.buttonContainer}>
         <TouchableOpacity
           style={styles.backButton}
@@ -274,39 +285,66 @@ export default function ConfirmationScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background,
+  },
+  content: {
+    paddingBottom: 18,
+  },
+  backgroundAccent: {
+    position: 'absolute',
+    top: -110,
+    right: -86,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: 'rgba(77, 183, 255, 0.1)',
   },
   header: {
-    backgroundColor: SAMURAI_BLUE,
-    padding: 20,
-    paddingTop: 40,
+    paddingHorizontal: 20,
+    paddingTop: 44,
+    paddingBottom: 18,
     alignItems: 'center',
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: 'white',
+    color: colors.goldBright,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: colors.muted,
   },
   section: {
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: SAMURAI_BLUE,
+    fontSize: 21,
+    fontWeight: '800',
+    color: colors.goldBright,
     marginBottom: 12,
+  },
+  teamPanel: {
+    backgroundColor: colors.panelSoft,
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.panel,
+  },
+  imageFrame: {
+    height: 300,
+    borderRadius: 12,
+    marginBottom: 12,
+    overflow: 'hidden',
+    backgroundColor: '#06152c',
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
   },
   formationImage: {
     width: '100%',
-    height: 320,
-    borderRadius: 8,
-    marginBottom: 12,
-    backgroundColor: '#f0f0f0',
+    height: '100%',
   },
   imageActions: {
     flexDirection: 'row',
@@ -316,14 +354,15 @@ const styles = StyleSheet.create({
   secondaryButton: {
     flex: 1,
     borderWidth: 1,
-    borderColor: SAMURAI_BLUE,
-    borderRadius: 6,
+    borderColor: colors.border,
+    borderRadius: 8,
     paddingVertical: 10,
     alignItems: 'center',
+    backgroundColor: 'rgba(5, 17, 39, 0.72)',
   },
   secondaryButtonText: {
-    color: SAMURAI_BLUE,
-    fontWeight: '600',
+    color: colors.goldBright,
+    fontWeight: '800',
     fontSize: 13,
   },
   inlineLoader: {
@@ -334,19 +373,19 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: '800',
+    color: colors.goldBright,
     marginBottom: 8,
   },
   input: {
-    backgroundColor: 'white',
+    backgroundColor: 'rgba(5, 17, 39, 0.72)',
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
+    borderColor: colors.borderSoft,
+    borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
-    color: '#333',
+    color: colors.text,
   },
   textArea: {
     textAlignVertical: 'top',
@@ -354,31 +393,33 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 20,
     gap: 12,
   },
   backButton: {
     flex: 1,
-    backgroundColor: '#999',
+    backgroundColor: 'rgba(5, 17, 39, 0.72)',
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
   },
   backButtonText: {
-    color: 'white',
+    color: colors.text,
     fontWeight: 'bold',
     fontSize: 16,
   },
   confirmButton: {
     flex: 1,
-    backgroundColor: SAMURAI_BLUE,
+    backgroundColor: colors.gold,
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
   },
   confirmButtonText: {
-    color: 'white',
+    color: colors.background,
     fontWeight: 'bold',
     fontSize: 16,
   },

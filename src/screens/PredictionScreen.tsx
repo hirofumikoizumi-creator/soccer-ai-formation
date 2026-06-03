@@ -5,32 +5,28 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Dimensions,
 } from 'react-native';
 import type { PredictionData } from '../types';
 import AdPlaceholder from '../components/AdPlaceholder';
+import { colors, shadows } from '../theme';
 
 interface PredictionScreenProps {
   prediction: PredictionData;
   onReset: () => void;
 }
 
-const SAMURAI_BLUE = '#003F8F';
-const { width } = Dimensions.get('window');
-
 export default function PredictionScreen({
   prediction,
   onReset,
 }: PredictionScreenProps) {
-  const barWidth = (width - 64) / 2;
-
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <View style={styles.backgroundAccent} />
       <View style={styles.header}>
         <Text style={styles.title}>試合展望</Text>
+        <Text style={styles.subtitle}>Match Prediction</Text>
       </View>
 
-      {/* Match Info */}
       <View style={styles.matchInfo}>
         <View style={styles.teamColumn}>
           <Text style={styles.teamName}>{prediction.homeTeam}</Text>
@@ -61,7 +57,7 @@ export default function PredictionScreen({
                   styles.probabilityBar,
                   {
                     height: `${prediction.homeWinProbability}%`,
-                    backgroundColor: SAMURAI_BLUE,
+                    backgroundColor: colors.blue,
                   },
                 ]}
               />
@@ -80,7 +76,7 @@ export default function PredictionScreen({
                   styles.probabilityBar,
                   {
                     height: `${prediction.drawProbability}%`,
-                    backgroundColor: '#FFA500',
+                    backgroundColor: colors.orange,
                   },
                 ]}
               />
@@ -99,7 +95,7 @@ export default function PredictionScreen({
                   styles.probabilityBar,
                   {
                     height: `${prediction.awayWinProbability}%`,
-                    backgroundColor: '#DC143C',
+                    backgroundColor: colors.red,
                   },
                 ]}
               />
@@ -169,32 +165,48 @@ export default function PredictionScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background,
+  },
+  content: {
+    paddingBottom: 18,
+  },
+  backgroundAccent: {
+    position: 'absolute',
+    top: -120,
+    left: -90,
+    width: 270,
+    height: 270,
+    borderRadius: 135,
+    backgroundColor: 'rgba(217, 191, 120, 0.1)',
   },
   header: {
-    backgroundColor: SAMURAI_BLUE,
-    padding: 20,
-    paddingTop: 40,
+    paddingHorizontal: 20,
+    paddingTop: 44,
+    paddingBottom: 18,
     alignItems: 'center',
   },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: 'white',
+    color: colors.goldBright,
+  },
+  subtitle: {
+    color: colors.muted,
+    fontSize: 14,
+    marginTop: 6,
   },
   matchInfo: {
     flexDirection: 'row',
-    backgroundColor: 'white',
-    margin: 16,
+    backgroundColor: colors.panelSoft,
+    marginHorizontal: 20,
+    marginVertical: 12,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 18,
     justifyContent: 'space-between',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.panel,
   },
   teamColumn: {
     flex: 1,
@@ -203,12 +215,13 @@ const styles = StyleSheet.create({
   teamName: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: colors.text,
     marginBottom: 4,
+    textAlign: 'center',
   },
   formation: {
     fontSize: 12,
-    color: '#666',
+    color: colors.goldBright,
   },
   scoreColumn: {
     alignItems: 'center',
@@ -217,33 +230,32 @@ const styles = StyleSheet.create({
   predictedScore: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: SAMURAI_BLUE,
+    color: colors.goldBright,
     marginBottom: 4,
   },
   scoreLabel: {
     fontSize: 12,
-    color: '#666',
+    color: colors.muted,
   },
   section: {
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: SAMURAI_BLUE,
+    fontSize: 21,
+    fontWeight: '800',
+    color: colors.goldBright,
     marginBottom: 12,
   },
   probabilityContainer: {
     flexDirection: 'row',
-    backgroundColor: 'white',
-    borderRadius: 12,
+    backgroundColor: colors.panelSoft,
+    borderRadius: 18,
     padding: 16,
     justifyContent: 'space-around',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.panel,
   },
   probabilityColumn: {
     alignItems: 'center',
@@ -252,11 +264,13 @@ const styles = StyleSheet.create({
   barContainer: {
     width: 40,
     height: 150,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: 'rgba(5, 17, 39, 0.86)',
     borderRadius: 6,
     marginBottom: 12,
     justifyContent: 'flex-end',
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
   },
   probabilityBar: {
     width: '100%',
@@ -264,28 +278,26 @@ const styles = StyleSheet.create({
   teamLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#333',
+    color: colors.text,
     marginBottom: 4,
     textAlign: 'center',
   },
   probability: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: SAMURAI_BLUE,
+    color: colors.goldBright,
   },
   analysisBox: {
-    backgroundColor: 'white',
-    borderRadius: 12,
+    backgroundColor: colors.panelSoft,
+    borderRadius: 18,
     padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.panel,
   },
   analysisText: {
     fontSize: 14,
-    color: '#333',
+    color: colors.text,
     lineHeight: 22,
   },
   playersContainer: {
@@ -294,47 +306,45 @@ const styles = StyleSheet.create({
   },
   playersColumn: {
     flex: 1,
-    backgroundColor: 'white',
-    borderRadius: 12,
+    backgroundColor: colors.panelSoft,
+    borderRadius: 18,
     padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.panel,
   },
   playersTeamName: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: SAMURAI_BLUE,
+    color: colors.goldBright,
     marginBottom: 8,
     paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.borderSoft,
   },
   playerName: {
     fontSize: 12,
-    color: '#333',
+    color: colors.text,
     marginBottom: 4,
   },
   noPlayers: {
     fontSize: 12,
-    color: '#999',
+    color: colors.dim,
     fontStyle: 'italic',
   },
   adContainer: {
     marginVertical: 16,
   },
   resetButton: {
-    backgroundColor: SAMURAI_BLUE,
-    marginHorizontal: 16,
+    backgroundColor: colors.gold,
+    marginHorizontal: 20,
     marginVertical: 20,
     paddingVertical: 16,
     borderRadius: 8,
     alignItems: 'center',
   },
   resetButtonText: {
-    color: 'white',
+    color: colors.background,
     fontWeight: 'bold',
     fontSize: 16,
   },

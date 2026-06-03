@@ -7,8 +7,7 @@ import PredictionScreen from './src/screens/PredictionScreen';
 import AdPlaceholder from './src/components/AdPlaceholder';
 import { predictMatchOutcome } from './src/services/geminiService';
 import type { FormationData, PredictionData, AppScreen } from './src/types';
-
-const SAMURAI_BLUE = '#003F8F';
+import { colors } from './src/theme';
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<AppScreen>('home');
@@ -74,7 +73,7 @@ export default function App() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={SAMURAI_BLUE} />
+      <StatusBar style="light" backgroundColor={colors.background} />
 
       {currentScreen === 'home' && (
         <HomeScreen onProceed={handleHomeScreenProceed} />
@@ -100,7 +99,7 @@ export default function App() {
           {loading && (
             <ActivityIndicator
               size="large"
-              color={SAMURAI_BLUE}
+              color={colors.goldBright}
               style={styles.loadingIndicator}
             />
           )}
@@ -113,7 +112,7 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.background,
   },
   overlay: {
     position: 'absolute',
@@ -124,6 +123,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 999,
+    backgroundColor: 'rgba(2, 8, 23, 0.92)',
   },
   loadingIndicator: {
     marginTop: 20,
