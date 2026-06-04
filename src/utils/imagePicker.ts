@@ -103,7 +103,7 @@ export async function pickImage(): Promise<PickedImage | null> {
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing: false,
+      allowsEditing: true,
       base64: true,
       quality: 1,
       preferredAssetRepresentationMode:
@@ -142,7 +142,7 @@ export async function takePhoto(): Promise<PickedImage | null> {
 
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images'],
-      allowsEditing: false,
+      allowsEditing: true,
       base64: true,
       quality: 1,
       preferredAssetRepresentationMode:

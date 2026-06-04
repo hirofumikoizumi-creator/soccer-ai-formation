@@ -73,6 +73,25 @@ function normalizePlayers(players: unknown): string[] {
     .filter(Boolean);
 }
 
+function normalizeFormationAnalysis(
+  analysis: any,
+  teamType: 'home' | 'away'
+): FormationAnalysis {
+  return {
+    teamName: ensureJapaneseText(
+      analysis.teamName,
+      teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'
+    ),
+    formation: ensureJapaneseText(analysis.formation, '未解析'),
+    players: normalizePlayers(analysis.players),
+    confidence: typeof analysis.confidence === 'number' ? analysis.confidence : 0.5,
+  };
+}
+
+function hasUsefulFormationAnalysis(analysis: FormationAnalysis) {
+  return analysis.formation !== '未解析' || analysis.players.length > 0;
+}
+
 async function postGeminiGenerateContent(payload: unknown) {
   let lastError: unknown = null;
   const models = Array.from(new Set(GEMINI_MODELS.filter(Boolean)));
@@ -300,15 +319,53 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
     }
 
     const analysis = extractJsonObject(content);
-    return {
-      teamName: ensureJapaneseText(
-        analysis.teamName,
-        teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'
-      ),
-      formation: ensureJapaneseText(analysis.formation, '未解析'),
-      players: normalizePlayers(analysis.players),
-      confidence: typeof analysis.confidence === 'number' ? analysis.confidence : 0.5,
-    };
+    const normalizedAnalysis = normalizeFormationAnalysis(analysis, teamType);
+    if (hasUsefulFormationAnalysis(normalizedAnalysis)) {
+      return normalizedAnalysis;
+    }
+
+    const retryPrompt = `同じ画像をもう一度、OCRと配置推定を優先して解析してください。
+前回はフォーメーションや選手名が十分に読み取れませんでした。
+
+重要:
+- 画像の中のフォーメーション図、スタメン表、ピッチ上の選手名ラベルだけに集中してください。
+- ブラウザUI、広告、記事本文、スコア表示、SNSの余計な文字は無視してください。
+- フォーメーション名が明記されていなくても、GKを除く10人のライン人数から必ず最も近い形を推定してください。
+- 選手名は読める範囲だけでよいので、最大11名まで返してください。
+- players配列は可能なら "GK: 名前", "CB: 名前", "DMF: 名前", "CF: 名前" のようにポジション付きで返してください。
+- それでも読めない場合のみ、formationを"未解析"、playersを空配列にしてください。
+
+JSONのみで返してください。`;
+
+    const retryResponse = await postGeminiGenerateContent({
+      contents: [
+        {
+          parts: [
+            { text: retryPrompt },
+            {
+              inline_data: {
+                mime_type: mimeType,
+                data: imageBase64,
+              },
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: FORMATION_RESPONSE_SCHEMA,
+        candidateCount: 1,
+        maxOutputTokens: 768,
+        temperature: 0,
+      },
+    });
+
+    const retryContent = retryResponse.data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!retryContent) {
+      return normalizedAnalysis;
+    }
+
+    return normalizeFormationAnalysis(extractJsonObject(retryContent), teamType);
   } catch (error) {
     console.error('Error analyzing formation image:', error);
     throw error;

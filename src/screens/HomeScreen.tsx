@@ -56,6 +56,10 @@ function getAnalysisErrorMessage(error: unknown) {
   return 'AI解析に失敗しました。確認画面でチーム名やフォーメーションを手入力してください';
 }
 
+function hasUsefulAnalysis(formation: FormationData) {
+  return formation.formation !== '未解析' || formation.players.length > 0;
+}
+
 export default function HomeScreen({
   onProceed,
   remainingAnalyses,
@@ -238,6 +242,12 @@ export default function HomeScreen({
 
   const renderTeamCard = (teamType: 'home' | 'away', formation: FormationData) => {
     const isAnalyzing = analyzing === teamType;
+    const analyzed = hasUsefulAnalysis(formation);
+    const statusLabel = formation.imageUri
+      ? analyzed
+        ? 'AI画像読み取り済み'
+        : '画像登録済み（未解析）'
+      : '手入力';
 
     return (
       <View style={styles.formationCard}>
@@ -260,9 +270,14 @@ export default function HomeScreen({
           )}
         </View>
         <Text style={styles.teamName}>
-          {teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'}: {formation.imageUri ? 'AI読取済み' : '手入力'}
+          {teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'}: {statusLabel}
         </Text>
         <Text style={styles.formation}>フォーメーション: {formation.formation}</Text>
+        {formation.imageUri && !analyzed && (
+          <Text style={styles.analysisWarning}>
+            フォーメーションや選手名を読み取れていません。範囲指定して再読み取りするか、次の画面で手入力してください。
+          </Text>
+        )}
         {formation.imageUri && (
           <TouchableOpacity
             style={styles.changeButton}
@@ -272,7 +287,7 @@ export default function HomeScreen({
             {isAnalyzing ? (
               <ActivityIndicator size="small" color={colors.goldBright} />
             ) : (
-              <Text style={styles.buttonText}>AI分析</Text>
+              <Text style={styles.buttonText}>範囲指定して再読取</Text>
             )}
           </TouchableOpacity>
         )}
@@ -297,7 +312,7 @@ export default function HomeScreen({
               <Text style={styles.uploadIcon}>▣</Text>
               <View style={styles.uploadTextBlock}>
                 <Text style={styles.uploadText}>ギャラリーから選択</Text>
-                <Text style={styles.uploadSubText}>写真・スクリーンショットを使う</Text>
+                <Text style={styles.uploadSubText}>範囲指定してスクリーンショットを使う</Text>
               </View>
             </>
           )}
@@ -314,7 +329,7 @@ export default function HomeScreen({
               <Text style={styles.uploadIcon}>◉</Text>
               <View style={styles.uploadTextBlock}>
                 <Text style={styles.uploadText}>カメラで撮影</Text>
-                <Text style={styles.uploadSubText}>その場でフォーメーションを撮る</Text>
+                <Text style={styles.uploadSubText}>撮影後に読み取り範囲を指定</Text>
               </View>
             </>
           )}
@@ -571,6 +586,12 @@ const styles = StyleSheet.create({
   formation: {
     fontSize: 15,
     color: colors.text,
+    marginBottom: 12,
+  },
+  analysisWarning: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 18,
     marginBottom: 12,
   },
   changeButton: {

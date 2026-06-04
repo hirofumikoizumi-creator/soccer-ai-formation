@@ -268,14 +268,14 @@ export default function ConfirmationScreen({
               onPress={() => handleReplaceImage(teamType, 'library')}
               disabled={isAnalyzing}
             >
-              <Text style={styles.secondaryButtonText}>写真を選んでAI読取</Text>
+              <Text style={styles.secondaryButtonText}>写真を範囲指定してAI読取</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.secondaryButton}
               onPress={() => handleReplaceImage(teamType, 'camera')}
               disabled={isAnalyzing}
             >
-              <Text style={styles.secondaryButtonText}>撮影してAI読取</Text>
+              <Text style={styles.secondaryButtonText}>撮影後に範囲指定してAI読取</Text>
             </TouchableOpacity>
           </View>
           {isAnalyzing && (
