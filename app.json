@@ -11,8 +11,9 @@
     ],
     "ios": {
       "bundleIdentifier": "com.gsw.socceraiyosou",
-      "buildNumber": "29",
+      "buildNumber": "30",
       "infoPlist": {
+        "CFBundleDisplayName": "サッカーAI予想",
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "撮影したフォーメーション画像をAI解析するためにカメラを使用します。",
         "NSPhotoLibraryUsageDescription": "選択したフォーメーション画像をAI解析するために写真ライブラリを使用します。"
