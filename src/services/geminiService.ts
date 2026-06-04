@@ -42,6 +42,19 @@ const FORMATION_RESPONSE_SCHEMA = {
   required: ['teamName', 'formation', 'players', 'confidence'],
 };
 
+const PLAYER_OCR_RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    teamName: { type: 'STRING' },
+    players: {
+      type: 'ARRAY',
+      items: { type: 'STRING' },
+    },
+    confidence: { type: 'NUMBER' },
+  },
+  required: ['teamName', 'players', 'confidence'],
+};
+
 function assertGeminiApiKey() {
   if (!GEMINI_API_KEY) {
     throw new Error('AI解析キーがアプリに設定されていません');
@@ -68,9 +81,21 @@ function normalizePlayers(players: unknown): string[] {
     return [];
   }
 
+  const seen = new Set<string>();
   return players
     .map((player) => String(player).trim())
-    .filter(Boolean);
+    .map((player) => player.replace(/\s+/g, ' '))
+    .filter((player) => {
+      if (!player) {
+        return false;
+      }
+      const key = player.toLowerCase();
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
 }
 
 function normalizeFormationAnalysis(
@@ -90,6 +115,10 @@ function normalizeFormationAnalysis(
 
 function hasUsefulFormationAnalysis(analysis: FormationAnalysis) {
   return analysis.formation !== '未解析' || analysis.players.length > 0;
+}
+
+function mergePlayerLists(primaryPlayers: string[], secondaryPlayers: string[]) {
+  return normalizePlayers([...primaryPlayers, ...secondaryPlayers]).slice(0, 11);
 }
 
 async function postGeminiGenerateContent(payload: unknown) {
@@ -321,6 +350,32 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
     const analysis = extractJsonObject(content);
     const normalizedAnalysis = normalizeFormationAnalysis(analysis, teamType);
     if (hasUsefulFormationAnalysis(normalizedAnalysis)) {
+      if (normalizedAnalysis.players.length < 6) {
+        try {
+          const playerOcr = await readPlayersFromImage(
+            imageBase64,
+            teamType,
+            mimeType,
+            normalizedAnalysis.formation
+          );
+          const mergedPlayers = mergePlayerLists(normalizedAnalysis.players, playerOcr.players);
+
+          if (mergedPlayers.length > normalizedAnalysis.players.length) {
+            return {
+              ...normalizedAnalysis,
+              teamName:
+                normalizedAnalysis.teamName === (teamType === 'home' ? 'ホームチーム' : 'アウェイチーム')
+                  ? playerOcr.teamName
+                  : normalizedAnalysis.teamName,
+              players: mergedPlayers,
+              confidence: Math.max(normalizedAnalysis.confidence, playerOcr.confidence),
+            };
+          }
+        } catch (playerOcrError) {
+          console.warn('Player OCR retry failed', playerOcrError);
+        }
+      }
+
       return normalizedAnalysis;
     }
 
@@ -365,11 +420,104 @@ JSONのみで返してください。`;
       return normalizedAnalysis;
     }
 
-    return normalizeFormationAnalysis(extractJsonObject(retryContent), teamType);
+    const retryAnalysis = normalizeFormationAnalysis(extractJsonObject(retryContent), teamType);
+    if (retryAnalysis.players.length < 6) {
+      try {
+        const playerOcr = await readPlayersFromImage(
+          imageBase64,
+          teamType,
+          mimeType,
+          retryAnalysis.formation
+        );
+        return {
+          ...retryAnalysis,
+          teamName:
+            retryAnalysis.teamName === (teamType === 'home' ? 'ホームチーム' : 'アウェイチーム')
+              ? playerOcr.teamName
+              : retryAnalysis.teamName,
+          players: mergePlayerLists(retryAnalysis.players, playerOcr.players),
+          confidence: Math.max(retryAnalysis.confidence, playerOcr.confidence),
+        };
+      } catch (playerOcrError) {
+        console.warn('Player OCR retry failed', playerOcrError);
+      }
+    }
+
+    return retryAnalysis;
   } catch (error) {
     console.error('Error analyzing formation image:', error);
     throw error;
   }
+}
+
+async function readPlayersFromImage(
+  imageBase64: string,
+  teamType: 'home' | 'away',
+  mimeType = 'image/jpeg',
+  knownFormation = '未解析'
+) {
+  const prompt = `あなたはサッカー画像の選手名OCR専門家です。
+この画像から、${teamType === 'home' ? 'ホーム' : 'アウェイ'}チームの選手名だけをできる限り読み取ってください。
+フォーメーション推定よりも、選手名ラベル・スタメン表・ピッチ上の小さな文字の読み取りを最優先してください。
+
+前提:
+- 既知のフォーメーション候補: ${knownFormation}
+- 画像はスクリーンショット、テレビ画面の撮影、Web記事、SNS画像、フォーメーション図の可能性があります。
+- 画像の中にはブラウザUI、広告、記事本文、検索バー、スコア、SNSボタンなど余計な文字が含まれることがあります。
+
+読み取りルール:
+- ピッチ上の選手名ラベル、スタメン一覧、フォーメーション図内の名前を優先してください。
+- サッカー選手名らしい文字列のみをplayersに入れてください。
+- 背番号だけ、国名だけ、ポジション名だけ、クラブ名だけ、広告文、UI文字は除外してください。
+- 日本語、カタカナ、漢字、英字、ローマ字を読んでください。
+- 読める名前が一部だけでも返してください。最大11名です。
+- 配置が分かる場合は "GK: 名前", "CB: 名前", "SB: 名前", "DMF: 名前", "OMF: 名前", "CF: 名前" のようにポジション付きで返してください。
+- 配置が分からない場合は名前だけでも構いません。
+- 選手名を推測で捏造しないでください。読めた名前だけ返してください。
+
+JSONのみで返してください。`;
+
+  const response = await postGeminiGenerateContent({
+    contents: [
+      {
+        parts: [
+          { text: prompt },
+          {
+            inline_data: {
+              mime_type: mimeType,
+              data: imageBase64,
+            },
+          },
+        ],
+      },
+    ],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: PLAYER_OCR_RESPONSE_SCHEMA,
+      candidateCount: 1,
+      maxOutputTokens: 768,
+      temperature: 0,
+    },
+  });
+
+  const content = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!content) {
+    return {
+      teamName: teamType === 'home' ? 'ホームチーム' : 'アウェイチーム',
+      players: [],
+      confidence: 0,
+    };
+  }
+
+  const result = extractJsonObject(content);
+  return {
+    teamName: ensureJapaneseText(
+      result.teamName,
+      teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'
+    ),
+    players: normalizePlayers(result.players),
+    confidence: typeof result.confidence === 'number' ? result.confidence : 0.5,
+  };
 }
 
 export async function predictMatchOutcome(
