@@ -17,8 +17,11 @@ import { colors, shadows } from '../theme';
 interface HomeScreenProps {
   onProceed: (homeFormation: FormationData, awayFormation: FormationData) => void;
   remainingAnalyses: number;
+  remainingRewardedAds: number;
   dailyFreeLimit: number;
   onRequestRewardedAd: () => void;
+  onRequestImageReadReward: () => void;
+  onConsumeImageReadCredit: () => Promise<boolean>;
 }
 
 function createPendingFormation(
@@ -56,8 +59,11 @@ function getAnalysisErrorMessage(error: unknown) {
 export default function HomeScreen({
   onProceed,
   remainingAnalyses,
+  remainingRewardedAds,
   dailyFreeLimit,
   onRequestRewardedAd,
+  onRequestImageReadReward,
+  onConsumeImageReadCredit,
 }: HomeScreenProps) {
   const [homeFormation, setHomeFormation] = useState<FormationData | null>(null);
   const [awayFormation, setAwayFormation] = useState<FormationData | null>(null);
@@ -182,6 +188,19 @@ export default function HomeScreen({
     formation: FormationData
   ) => {
     try {
+      const canRetry = await onConsumeImageReadCredit();
+      if (!canRetry) {
+        Alert.alert(
+          '画像の再読み取り',
+          '画像のAI再読み取りにはリワード広告が必要です。手入力での修正は無料で利用できます。',
+          [
+            { text: '手入力で修正', style: 'cancel' },
+            { text: '広告を見て再読取+1', onPress: onRequestImageReadReward },
+          ]
+        );
+        return;
+      }
+
       setAnalyzing(teamType);
       if (!formation.imageBase64) {
         throw new Error('画像データを再分析できませんでした。写真をもう一度選択してください');
@@ -341,7 +360,10 @@ export default function HomeScreen({
           無料は1日{dailyFreeLimit}試合まで。写真読み取りや手入力では消費せず、試合予想の生成成功時に1回消費します。
         </Text>
         <Text style={styles.reviewNote}>
-          広告を最後まで見ると試合予想を1回追加できます。写真はAI解析のため外部AIサービスへ送信される場合があります。
+          広告を最後まで見ると試合予想または画像再読取を追加できます。本日の広告追加は残り{remainingRewardedAds}回です。
+        </Text>
+        <Text style={styles.reviewNote}>
+          写真はAI解析のため外部AIサービスへ送信される場合があります。画像の再読み取りは広告視聴、手入力での修正は無料です。
         </Text>
         {remainingAnalyses <= 0 && (
           <TouchableOpacity style={styles.rewardButton} onPress={onRequestRewardedAd}>

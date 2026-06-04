@@ -11,7 +11,7 @@ export interface PickedImage {
 
 async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<PickedImage> {
   const maxDimension = Math.max(asset.width || 0, asset.height || 0);
-  const targetMaxDimension = 3200;
+  const targetMaxDimension = 3000;
   const resize =
     maxDimension > targetMaxDimension
       ? {
@@ -22,19 +22,39 @@ async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<
         }
       : undefined;
 
-  const manipulated = await ImageManipulator.manipulateAsync(
-    asset.uri,
-    resize ? [{ resize }] : [],
-    {
-      base64: true,
-      compress: 0.98,
-      format: ImageManipulator.SaveFormat.JPEG,
+  try {
+    const manipulated = await ImageManipulator.manipulateAsync(
+      asset.uri,
+      resize ? [{ resize }] : [],
+      {
+        base64: true,
+        compress: 0.96,
+        format: ImageManipulator.SaveFormat.JPEG,
+      }
+    );
+
+    const base64 =
+      manipulated.base64 ??
+      (await FileSystem.readAsStringAsync(manipulated.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      }));
+
+    if (!base64) {
+      throw new Error('画像をAI解析用データに変換できませんでした');
     }
-  );
+
+    return {
+      base64,
+      mimeType: 'image/jpeg',
+      uri: manipulated.uri,
+    };
+  } catch (error) {
+    console.warn('Image manipulation failed. Falling back to original asset.', error);
+  }
 
   const base64 =
-    manipulated.base64 ??
-    (await FileSystem.readAsStringAsync(manipulated.uri, {
+    asset.base64 ??
+    (await FileSystem.readAsStringAsync(asset.uri, {
       encoding: FileSystem.EncodingType.Base64,
     }));
 
@@ -44,8 +64,8 @@ async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<
 
   return {
     base64,
-    mimeType: 'image/jpeg',
-    uri: manipulated.uri,
+    mimeType: asset.mimeType || 'image/jpeg',
+    uri: asset.uri,
   };
 }
 

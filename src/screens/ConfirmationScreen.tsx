@@ -23,8 +23,11 @@ interface ConfirmationScreenProps {
   onConfirm: (home: FormationData, away: FormationData) => void;
   onBack: () => void;
   remainingAnalyses: number;
+  remainingRewardedAds: number;
   dailyFreeLimit: number;
   onRequestRewardedAd: () => void;
+  onRequestImageReadReward: () => void;
+  onConsumeImageReadCredit: () => Promise<boolean>;
 }
 
 const FORMATION_OPTIONS = [
@@ -90,8 +93,11 @@ export default function ConfirmationScreen({
   onConfirm,
   onBack,
   remainingAnalyses,
+  remainingRewardedAds,
   dailyFreeLimit,
   onRequestRewardedAd,
+  onRequestImageReadReward,
+  onConsumeImageReadCredit,
 }: ConfirmationScreenProps) {
   const [activeTeam, setActiveTeam] = useState<'home' | 'away'>('home');
 
@@ -117,10 +123,26 @@ export default function ConfirmationScreen({
     source: 'library' | 'camera'
   ) => {
     try {
+      const previousImageUri = teamType === 'home' ? homeImageUri : awayImageUri;
       setReanalyzing(teamType);
       const image = source === 'library' ? await pickImage() : await takePhoto();
       if (!image) {
         return;
+      }
+
+      if (previousImageUri) {
+        const canRetry = await onConsumeImageReadCredit();
+        if (!canRetry) {
+          Alert.alert(
+            '画像の再読み取り',
+            '画像を変更してAIで再読み取りするにはリワード広告が必要です。手入力での修正は無料です。',
+            [
+              { text: '手入力で修正', style: 'cancel' },
+              { text: '広告を見て再読取+1', onPress: onRequestImageReadReward },
+            ]
+          );
+          return;
+        }
       }
 
       if (teamType === 'home') {
@@ -334,7 +356,10 @@ export default function ConfirmationScreen({
             写真の読み取りや手入力では消費せず、試合予想の生成成功時に1回消費します。無料は1日{dailyFreeLimit}試合までです。
           </Text>
           <Text style={styles.reviewNote}>
-            広告を最後まで見ると試合予想を1回追加できます。写真はAI解析のため外部AIサービスへ送信される場合があります。
+            広告を最後まで見ると試合予想または画像再読取を追加できます。本日の広告追加は残り{remainingRewardedAds}回です。
+          </Text>
+          <Text style={styles.reviewNote}>
+            写真はAI解析のため外部AIサービスへ送信される場合があります。画像の再読み取りは広告視聴、手入力での修正は無料です。
           </Text>
           {remainingAnalyses <= 0 && (
             <TouchableOpacity style={styles.rewardButton} onPress={onRequestRewardedAd}>

@@ -13,6 +13,7 @@ import {
   createEmptyUsage,
   DAILY_FREE_ANALYSIS_LIMIT,
   getRemainingAnalyses,
+  getRemainingRewardedAds,
   loadAnalysisUsage,
   saveAnalysisUsage,
 } from './src/utils/analysisUsage';
@@ -25,6 +26,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [showAd, setShowAd] = useState(false);
   const [showRewardedAd, setShowRewardedAd] = useState(false);
+  const [rewardPurpose, setRewardPurpose] = useState<'prediction' | 'imageRead'>('prediction');
   const [usage, setUsage] = useState<AnalysisUsage>(createEmptyUsage());
 
   React.useEffect(() => {
@@ -54,12 +56,59 @@ export default function App() {
 
   const handleRewardEarned = async () => {
     const freshUsage = await loadAnalysisUsage();
+    if (getRemainingRewardedAds(freshUsage) <= 0) {
+      setUsage(freshUsage);
+      Alert.alert('本日の広告追加は上限です', 'リワード広告による追加は1日3回までです。');
+      return;
+    }
+
     const nextUsage = {
       ...freshUsage,
-      rewardedCredits: freshUsage.rewardedCredits + 1,
+      rewardedCredits:
+        rewardPurpose === 'prediction'
+          ? freshUsage.rewardedCredits + 1
+          : freshUsage.rewardedCredits,
+      imageReadCredits:
+        rewardPurpose === 'imageRead'
+          ? freshUsage.imageReadCredits + 1
+          : freshUsage.imageReadCredits,
+      rewardedViews: freshUsage.rewardedViews + 1,
     };
     await persistUsage(nextUsage);
-    Alert.alert('試合予想回数を追加しました', 'AI分析を1回追加で利用できます。');
+    Alert.alert(
+      rewardPurpose === 'prediction' ? '試合予想回数を追加しました' : '画像再読取を追加しました',
+      rewardPurpose === 'prediction'
+        ? 'AI分析を1回追加で利用できます。'
+        : '画像のAI再読み取りを1回利用できます。もう一度AI読取を押してください。'
+    );
+  };
+
+  const requestRewardedAd = async (purpose: 'prediction' | 'imageRead' = 'prediction') => {
+    const freshUsage = await loadAnalysisUsage();
+    setUsage(freshUsage);
+
+    if (getRemainingRewardedAds(freshUsage) <= 0) {
+      Alert.alert('本日の広告追加は上限です', 'リワード広告による追加は1日3回までです。手入力での修正は無料で利用できます。');
+      return;
+    }
+
+    setRewardPurpose(purpose);
+    setShowRewardedAd(true);
+  };
+
+  const consumeImageReadCredit = async () => {
+    const freshUsage = await loadAnalysisUsage();
+    if (freshUsage.imageReadCredits <= 0) {
+      setUsage(freshUsage);
+      return false;
+    }
+
+    const nextUsage = {
+      ...freshUsage,
+      imageReadCredits: freshUsage.imageReadCredits - 1,
+    };
+    await persistUsage(nextUsage);
+    return true;
   };
 
   const handleHomeScreenProceed = (home: FormationData, away: FormationData) => {
@@ -81,7 +130,7 @@ export default function App() {
         'リワード広告を見ると試合予想を1回追加できます。',
         [
           { text: 'あとで', style: 'cancel' },
-          { text: '広告を見て+1回', onPress: () => setShowRewardedAd(true) },
+          { text: '広告を見て+1回', onPress: () => requestRewardedAd('prediction') },
         ]
       );
       return;
@@ -113,7 +162,7 @@ export default function App() {
           'リワード広告を見ると試合予想を1回追加できます。',
           [
             { text: 'あとで', style: 'cancel' },
-            { text: '広告を見て+1回', onPress: () => setShowRewardedAd(true) },
+            { text: '広告を見て+1回', onPress: () => requestRewardedAd('prediction') },
           ]
         );
         setCurrentScreen('confirmation');
@@ -153,8 +202,11 @@ export default function App() {
         <HomeScreen
           onProceed={handleHomeScreenProceed}
           remainingAnalyses={getRemainingAnalyses(usage)}
+          remainingRewardedAds={getRemainingRewardedAds(usage)}
           dailyFreeLimit={DAILY_FREE_ANALYSIS_LIMIT}
-          onRequestRewardedAd={() => setShowRewardedAd(true)}
+          onRequestRewardedAd={() => requestRewardedAd('prediction')}
+          onRequestImageReadReward={() => requestRewardedAd('imageRead')}
+          onConsumeImageReadCredit={consumeImageReadCredit}
         />
       )}
 
@@ -165,8 +217,11 @@ export default function App() {
           onConfirm={handleConfirmationConfirm}
           onBack={handleBackFromConfirmation}
           remainingAnalyses={getRemainingAnalyses(usage)}
+          remainingRewardedAds={getRemainingRewardedAds(usage)}
           dailyFreeLimit={DAILY_FREE_ANALYSIS_LIMIT}
-          onRequestRewardedAd={() => setShowRewardedAd(true)}
+          onRequestRewardedAd={() => requestRewardedAd('prediction')}
+          onRequestImageReadReward={() => requestRewardedAd('imageRead')}
+          onConsumeImageReadCredit={consumeImageReadCredit}
         />
       )}
 

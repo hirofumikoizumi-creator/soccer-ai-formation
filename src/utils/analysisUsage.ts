@@ -1,11 +1,14 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
-export const DAILY_FREE_ANALYSIS_LIMIT = 3;
+export const DAILY_FREE_ANALYSIS_LIMIT = 2;
+export const DAILY_REWARDED_ANALYSIS_LIMIT = 3;
 
 export interface AnalysisUsage {
   date: string;
   used: number;
   rewardedCredits: number;
+  rewardedViews: number;
+  imageReadCredits: number;
 }
 
 const USAGE_FILE = `${FileSystem.documentDirectory || ''}analysis-usage.json`;
@@ -19,11 +22,17 @@ export function createEmptyUsage(): AnalysisUsage {
     date: getUsageDate(),
     used: 0,
     rewardedCredits: 0,
+    rewardedViews: 0,
+    imageReadCredits: 0,
   };
 }
 
 export function getRemainingAnalyses(usage: AnalysisUsage) {
   return Math.max(0, DAILY_FREE_ANALYSIS_LIMIT + usage.rewardedCredits - usage.used);
+}
+
+export function getRemainingRewardedAds(usage: AnalysisUsage) {
+  return Math.max(0, DAILY_REWARDED_ANALYSIS_LIMIT - usage.rewardedViews);
 }
 
 export async function loadAnalysisUsage(): Promise<AnalysisUsage> {
@@ -45,6 +54,8 @@ export async function loadAnalysisUsage(): Promise<AnalysisUsage> {
       date: today,
       used: Math.max(0, Number(parsed.used) || 0),
       rewardedCredits: Math.max(0, Number(parsed.rewardedCredits) || 0),
+      rewardedViews: Math.max(0, Number(parsed.rewardedViews) || 0),
+      imageReadCredits: Math.max(0, Number(parsed.imageReadCredits) || 0),
     };
   } catch (error) {
     console.warn('Failed to load analysis usage', error);
