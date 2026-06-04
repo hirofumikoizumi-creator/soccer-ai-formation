@@ -124,6 +124,39 @@ function ensureJapaneseText(value: unknown, fallback: string) {
   return text || fallback;
 }
 
+function parsePositionedPlayers(players: string[]) {
+  return players
+    .map((player) => {
+      const text = player.trim();
+      const match = text.match(/^([A-Z]{1,4})\s*[:：]\s*(.+)$/i);
+      if (!match) {
+        return {
+          position: '',
+          name: text,
+          label: text,
+        };
+      }
+
+      const position = match[1].toUpperCase();
+      const name = match[2].trim();
+      return {
+        position,
+        name,
+        label: `${position}: ${name}`,
+      };
+    })
+    .filter((player) => player.name);
+}
+
+function formatLineupForPrompt(players: string[]) {
+  const positionedPlayers = parsePositionedPlayers(players);
+  if (positionedPlayers.length === 0) {
+    return '不明';
+  }
+
+  return positionedPlayers.map((player, index) => `${index + 1}. ${player.label}`).join('\n');
+}
+
 function summarizeFormation(formation: string, teamLabel: string) {
   const normalized = formation.trim();
   const notes: Record<string, string> = {
@@ -142,12 +175,16 @@ function summarizeFormation(formation: string, teamLabel: string) {
 }
 
 function formatPlayerMention(teamLabel: string, players: string[]) {
-  const names = players.slice(0, 5).join('、');
-  if (!names) {
+  const positionedPlayers = parsePositionedPlayers(players).slice(0, 5);
+  if (positionedPlayers.length === 0) {
     return `${teamLabel}は選手名が不足しているため、個別の役割は断定せず配置面を中心に見ます。`;
   }
 
-  return `${teamLabel}の読み取れたメンバーには${names}などが含まれます。ただし、入力情報だけでは各選手の正確なポジションや役割までは断定せず、フォーメーション全体の噛み合わせを優先して評価します。`;
+  const names = positionedPlayers
+    .map((player) => (player.position ? `${player.position}の${player.name}` : player.name))
+    .join('、');
+
+  return `${teamLabel}の読み取れたメンバーには${names}などが含まれます。ポジション表記がある選手はその配置として扱い、表記がない選手は個別の役割を断定せず、フォーメーション全体の噛み合わせを優先して評価します。`;
 }
 
 function buildTacticalAnalysisFallback(
@@ -216,6 +253,9 @@ export async function analyzeFormationImage(
 - まず画像全体の向き、ピッチ、選手名ラベル、ベンチや広告などの余計な文字を分離してください。
 - GK、DF、MF、FWのラインごとに人数を数え、フォーメーションを推定してください。
 - 選手名はピッチ上またはスタメン欄にある11名を優先してください。
+- players配列は、可能な限り "GK: 選手名", "CB: 選手名", "SB: 選手名", "DMF: 選手名", "OMF: 選手名", "CF: 選手名" のようにポジション付きで返してください。
+- ポジションが不明な選手は名前だけ返してよいですが、配置から推定できる場合は必ずポジションを付けてください。
+- players配列の順番は、GK、DF、MF、FWの順にしてください。
 - テレビ画面の撮影では、傾きやモアレがあっても、読める名前を最大11名まで返してください。
 - スクリーンショットでは、フォーメーション図の名前とリスト表示の名前を照合してください。
 
@@ -297,18 +337,22 @@ export async function predictMatchOutcome(
 
 ホームチーム: ${homeTeam}
 ホームのフォーメーション: ${homeFormation}
-ホームの読み取れた選手名（順番やポジションは不確実な場合があります）: ${homePlayers.join(', ') || '不明'}
+ホームの選手とポジション:
+${formatLineupForPrompt(homePlayers)}
 
 アウェイチーム: ${awayTeam}
 アウェイのフォーメーション: ${awayFormation}
-アウェイの読み取れた選手名（順番やポジションは不確実な場合があります）: ${awayPlayers.join(', ') || '不明'}
+アウェイの選手とポジション:
+${formatLineupForPrompt(awayPlayers)}
 
 必ず日本語で、具体的な試合展開、攻撃・守備の噛み合わせ、勝敗予測の理由を説明してください。
 戦術分析は300〜500文字にしてください。
 戦術分析では、必ず両チームのフォーメーションに言及してください。
 フォーメーションから分かるライン構成、サイドの使い方、中央の人数、守備時の形を優先して分析してください。
-選手名が入力されている場合は、各チームから1〜3名ずつ自然に含めてください。ただし、選手の正確なポジションや特徴が入力情報から分からない場合、その選手がドリブルする、配球する、裏抜けする、守備を統率する等の具体的なプレー内容を断定しないでください。
-選手名は「メンバーに含まれる」「出場予定として読み取れる」程度に扱い、プレー内容はフォーメーションとチーム全体の配置から説明してください。
+選手に "CF: 山田" のようなポジション表記がある場合は、そのポジションとして扱ってください。
+選手名が入力されている場合は、各チームから1〜3名ずつ自然に含めてください。ただし、ポジション表記や入力情報から分からない特徴を作らないでください。
+例えばCBの選手をサイド突破の中心、GKを前線の起点、CFを守備統率役のように書かないでください。
+選手名は、ポジションとフォーメーション上の役割に沿って扱い、個人能力の特徴は推測で断定しないでください。
 選手名が不足している場合は無理に架空の名前を作らず、「中盤」「前線」「サイド」「最終ライン」など役割で説明してください。
 ホームを常に優勢にしないでください。フォーメーションの噛み合わせから中立に判断してください。
 返答は有効なJSONのみで、この形式にしてください:

@@ -39,8 +39,40 @@ const FORMATION_OPTIONS = [
   '5-4-1',
 ];
 
+const POSITION_LABELS_BY_FORMATION: Record<string, string[]> = {
+  '4-4-2': ['GK', 'RB', 'CB', 'CB', 'LB', 'RMF', 'CMF', 'CMF', 'LMF', 'CF', 'CF'],
+  '4-3-3': ['GK', 'RB', 'CB', 'CB', 'LB', 'DMF', 'CMF', 'CMF', 'RWG', 'CF', 'LWG'],
+  '4-2-3-1': ['GK', 'RB', 'CB', 'CB', 'LB', 'DMF', 'DMF', 'RMF', 'OMF', 'LMF', 'CF'],
+  '4-1-4-1': ['GK', 'RB', 'CB', 'CB', 'LB', 'DMF', 'RMF', 'CMF', 'CMF', 'LMF', 'CF'],
+  '3-4-3': ['GK', 'CB', 'CB', 'CB', 'RWB', 'CMF', 'CMF', 'LWB', 'RWG', 'CF', 'LWG'],
+  '3-5-2': ['GK', 'CB', 'CB', 'CB', 'RWB', 'CMF', 'DMF', 'CMF', 'LWB', 'CF', 'CF'],
+  '3-4-2-1': ['GK', 'CB', 'CB', 'CB', 'RWB', 'CMF', 'CMF', 'LWB', 'ST', 'ST', 'CF'],
+  '5-3-2': ['GK', 'RWB', 'CB', 'CB', 'CB', 'LWB', 'CMF', 'DMF', 'CMF', 'CF', 'CF'],
+  '5-4-1': ['GK', 'RWB', 'CB', 'CB', 'CB', 'LWB', 'RMF', 'CMF', 'CMF', 'LMF', 'CF'],
+};
+
+const DEFAULT_POSITION_LABELS = ['GK', 'DF', 'DF', 'DF', 'DF', 'MF', 'MF', 'MF', 'MF', 'FW', 'FW'];
+
+function getPositionLabels(formation: string) {
+  return POSITION_LABELS_BY_FORMATION[formation.trim()] || DEFAULT_POSITION_LABELS;
+}
+
+function stripPositionPrefix(player: string) {
+  return player.replace(/^[A-Z]{1,4}\s*[:：]\s*/i, '').trim();
+}
+
+function createPositionedPlayers(players: string[], formation: string) {
+  const positionLabels = getPositionLabels(formation);
+  return players
+    .map((player, index) => {
+      const name = stripPositionPrefix(player);
+      return name ? `${positionLabels[index] || `P${index + 1}`}: ${name}` : '';
+    })
+    .filter(Boolean);
+}
+
 function createPlayerFields(players: string[]) {
-  const fields = Array.from({ length: 11 }, (_, index) => players[index] || '');
+  const fields = Array.from({ length: 11 }, (_, index) => stripPositionPrefix(players[index] || ''));
   return fields;
 }
 
@@ -140,7 +172,7 @@ export default function ConfirmationScreen({
         imageUri: homeImageUri,
         imageBase64: homeImageBase64,
         mimeType: homeMimeType,
-        players: homePlayers.map((p) => p.trim()).filter(Boolean),
+        players: createPositionedPlayers(homePlayers, homeFormationStr),
       };
 
       const updatedAway: FormationData = {
@@ -150,7 +182,7 @@ export default function ConfirmationScreen({
         imageUri: awayImageUri,
         imageBase64: awayImageBase64,
         mimeType: awayMimeType,
-        players: awayPlayers.map((p) => p.trim()).filter(Boolean),
+        players: createPositionedPlayers(awayPlayers, awayFormationStr),
       };
 
       onConfirm(updatedHome, updatedAway);
@@ -190,6 +222,7 @@ export default function ConfirmationScreen({
     const players = isHome ? homePlayers : awayPlayers;
     const imageUri = isHome ? homeImageUri : awayImageUri;
     const isAnalyzing = reanalyzing === teamType;
+    const positionLabels = getPositionLabels(formation);
 
     return (
       <View style={styles.section}>
@@ -251,16 +284,20 @@ export default function ConfirmationScreen({
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>選手名（11名）</Text>
+            <Text style={styles.label}>選手名（11名・ポジション順）</Text>
+            <Text style={styles.helpText}>
+              選択中の{formation}に合わせて、各欄に想定ポジションを表示しています。
+            </Text>
             <View style={styles.playersGrid}>
               {players.map((player, index) => (
                 <View key={index} style={styles.playerInputRow}>
                   <Text style={styles.playerNumber}>{index + 1}</Text>
+                  <Text style={styles.positionBadge}>{positionLabels[index] || `P${index + 1}`}</Text>
                   <TextInput
                     style={styles.playerInput}
                     value={player}
                     onChangeText={(value) => updatePlayer(teamType, index, value)}
-                    placeholder={`選手${index + 1}`}
+                    placeholder={`${positionLabels[index] || `P${index + 1}`}の選手名`}
                     placeholderTextColor={colors.dim}
                   />
                 </View>
@@ -553,6 +590,12 @@ const styles = StyleSheet.create({
     color: colors.goldBright,
     marginBottom: 8,
   },
+  helpText: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 10,
+  },
   input: {
     backgroundColor: 'rgba(5, 17, 39, 0.72)',
     borderWidth: 1,
@@ -607,6 +650,20 @@ const styles = StyleSheet.create({
     color: colors.background,
     backgroundColor: colors.gold,
     fontWeight: '900',
+  },
+  positionBadge: {
+    width: 48,
+    minHeight: 28,
+    borderRadius: 7,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    color: colors.goldBright,
+    backgroundColor: 'rgba(5, 17, 39, 0.92)',
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    fontSize: 11,
+    fontWeight: '900',
+    paddingVertical: 5,
   },
   playerInput: {
     flex: 1,
