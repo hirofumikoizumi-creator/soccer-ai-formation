@@ -124,6 +124,32 @@ function ensureJapaneseText(value: unknown, fallback: string) {
   return text || fallback;
 }
 
+function summarizeFormation(formation: string, teamLabel: string) {
+  const normalized = formation.trim();
+  const notes: Record<string, string> = {
+    '4-4-2': `${teamLabel}の4-4-2は2トップを前線に置き、サイドと中央のバランスを取りやすい形です。守備時は中盤4枚で横幅を埋め、攻撃時は前線2枚への早い展開が鍵になります。`,
+    '4-3-3': `${teamLabel}の4-3-3は前線3枚で幅を作りやすく、中盤3枚の距離感が攻守の安定に直結します。サイドで優位を作れるかが大きなポイントです。`,
+    '4-2-3-1': `${teamLabel}の4-2-3-1はダブルボランチで守備の土台を作り、2列目の3枚が相手の間で受けられるかが攻撃の焦点になります。`,
+    '4-1-4-1': `${teamLabel}の4-1-4-1はアンカーを置いて中央を締めやすく、前後の距離を保ちながらサイドへ展開できるかが重要です。`,
+    '3-4-3': `${teamLabel}の3-4-3はウイングバックの上下動で幅を作り、前線3枚で相手の最終ラインへ圧力をかけやすい形です。`,
+    '3-5-2': `${teamLabel}の3-5-2は中央に人数をかけやすく、2トップと中盤の関係で前進できるかが鍵になります。サイドの背後管理も重要です。`,
+    '3-4-2-1': `${teamLabel}の3-4-2-1は2シャドーが相手中盤と最終ラインの間で受けられるかが焦点です。守備時は5バック気味に整えやすい形です。`,
+    '5-3-2': `${teamLabel}の5-3-2は守備の人数を確保しやすく、奪った後に2トップへ素早く届けられるかが攻撃の鍵になります。`,
+    '5-4-1': `${teamLabel}の5-4-1は低い位置で守備を固めやすく、カウンター時に前線を孤立させないサポートが重要です。`,
+  };
+
+  return notes[normalized] || `${teamLabel}は${normalized || '不明なフォーメーション'}をベースに、各ラインの距離感とサイドの使い方が試合展開を左右します。`;
+}
+
+function formatPlayerMention(teamLabel: string, players: string[]) {
+  const names = players.slice(0, 5).join('、');
+  if (!names) {
+    return `${teamLabel}は選手名が不足しているため、個別の役割は断定せず配置面を中心に見ます。`;
+  }
+
+  return `${teamLabel}の読み取れたメンバーには${names}などが含まれます。ただし、入力情報だけでは各選手の正確なポジションや役割までは断定せず、フォーメーション全体の噛み合わせを優先して評価します。`;
+}
+
 function buildTacticalAnalysisFallback(
   homeTeam: string,
   awayTeam: string,
@@ -132,10 +158,7 @@ function buildTacticalAnalysisFallback(
   homePlayers: string[],
   awayPlayers: string[]
 ) {
-  const homeKeyPlayers = homePlayers.slice(0, 3).join('、') || '中盤と前線の選手';
-  const awayKeyPlayers = awayPlayers.slice(0, 3).join('、') || 'サイドと前線の選手';
-
-  return `${homeTeam}は${homeFormation}をベースに、${homeKeyPlayers}を中心として中盤から攻撃の形を作れるかが鍵になります。ボール保持で相手の守備ラインを動かし、サイドやトップ下のスペースを使えれば主導権を握りやすい展開です。一方、${awayTeam}は${awayFormation}から守備の人数を確保しつつ、${awayKeyPlayers}を起点に素早い攻撃へ移る形が狙いになります。ホームが押し込む時間は長くなりそうですが、アウェイのカウンターにも注意が必要です。総合的には、配置の安定感と攻撃の再現性でホームがやや優勢と見ます。`;
+  return `${summarizeFormation(homeFormation, homeTeam)}一方、${summarizeFormation(awayFormation, awayTeam)}${formatPlayerMention(homeTeam, homePlayers)}${formatPlayerMention(awayTeam, awayPlayers)}総合的には、個人名からプレー内容を決め打ちせず、両チームの配置とライン間の噛み合わせから見ると、中盤の支配とサイドの背後管理が勝敗を分ける展開になりそうです。`;
 }
 
 function normalizeProbability(value: unknown, fallback: number) {
@@ -145,6 +168,31 @@ function normalizeProbability(value: unknown, fallback: number) {
   }
 
   return Math.max(0, Math.min(100, Math.round(numberValue)));
+}
+
+function estimateFallbackProbabilities(homeFormation: string, awayFormation: string) {
+  const attackScore: Record<string, number> = {
+    '4-3-3': 4,
+    '3-4-3': 4,
+    '4-2-3-1': 3,
+    '3-4-2-1': 3,
+    '4-4-2': 2,
+    '3-5-2': 2,
+    '4-1-4-1': 1,
+    '5-3-2': 0,
+    '5-4-1': 0,
+  };
+  const homeScore = attackScore[homeFormation.trim()] ?? 2;
+  const awayScore = attackScore[awayFormation.trim()] ?? 2;
+  const diff = Math.max(-2, Math.min(2, homeScore - awayScore));
+  const homeWinProbability = 36 + diff * 4;
+  const awayWinProbability = 34 - diff * 4;
+
+  return {
+    homeWinProbability,
+    drawProbability: 30,
+    awayWinProbability,
+  };
 }
 
 export async function analyzeFormationImage(
@@ -240,6 +288,7 @@ export async function predictMatchOutcome(
     homePlayers,
     awayPlayers
   );
+  const fallbackProbabilities = estimateFallbackProbabilities(homeFormation, awayFormation);
 
   try {
     assertGeminiApiKey();
@@ -248,17 +297,20 @@ export async function predictMatchOutcome(
 
 ホームチーム: ${homeTeam}
 ホームのフォーメーション: ${homeFormation}
-ホームの選手: ${homePlayers.join(', ') || '不明'}
+ホームの読み取れた選手名（順番やポジションは不確実な場合があります）: ${homePlayers.join(', ') || '不明'}
 
 アウェイチーム: ${awayTeam}
 アウェイのフォーメーション: ${awayFormation}
-アウェイの選手: ${awayPlayers.join(', ') || '不明'}
+アウェイの読み取れた選手名（順番やポジションは不確実な場合があります）: ${awayPlayers.join(', ') || '不明'}
 
 必ず日本語で、具体的な試合展開、攻撃・守備の噛み合わせ、勝敗予測の理由を説明してください。
 戦術分析は300〜500文字にしてください。
 戦術分析では、必ず両チームのフォーメーションに言及してください。
-選手名が入力されている場合は、各チームから1〜3名ずつ自然に含めてください。
+フォーメーションから分かるライン構成、サイドの使い方、中央の人数、守備時の形を優先して分析してください。
+選手名が入力されている場合は、各チームから1〜3名ずつ自然に含めてください。ただし、選手の正確なポジションや特徴が入力情報から分からない場合、その選手がドリブルする、配球する、裏抜けする、守備を統率する等の具体的なプレー内容を断定しないでください。
+選手名は「メンバーに含まれる」「出場予定として読み取れる」程度に扱い、プレー内容はフォーメーションとチーム全体の配置から説明してください。
 選手名が不足している場合は無理に架空の名前を作らず、「中盤」「前線」「サイド」「最終ライン」など役割で説明してください。
+ホームを常に優勢にしないでください。フォーメーションの噛み合わせから中立に判断してください。
 返答は有効なJSONのみで、この形式にしてください:
 {
   "predictedScore": "X-Y",
@@ -334,9 +386,9 @@ export async function predictMatchOutcome(
       homePlayers,
       awayPlayers,
       predictedScore: '1-1',
-      homeWinProbability: 38,
-      drawProbability: 31,
-      awayWinProbability: 31,
+      homeWinProbability: fallbackProbabilities.homeWinProbability,
+      drawProbability: fallbackProbabilities.drawProbability,
+      awayWinProbability: fallbackProbabilities.awayWinProbability,
       tacticalAnalysis: fallbackAnalysis,
     };
   }
