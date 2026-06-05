@@ -11,7 +11,7 @@ export interface PickedImage {
 
 async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<PickedImage> {
   const maxDimension = Math.max(asset.width || 0, asset.height || 0);
-  const targetMaxDimension = 2048;
+  const targetMaxDimension = 1600;
   const resize =
     maxDimension > targetMaxDimension
       ? {
@@ -28,7 +28,7 @@ async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<
       resize ? [{ resize }] : [],
       {
         base64: true,
-        compress: 0.86,
+        compress: 0.78,
         format: ImageManipulator.SaveFormat.JPEG,
       }
     );

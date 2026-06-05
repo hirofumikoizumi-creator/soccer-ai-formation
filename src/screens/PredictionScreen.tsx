@@ -110,7 +110,7 @@ export default function PredictionScreen({
 
       {/* Tactical Analysis */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>戦術分析</Text>
+        <Text style={styles.sectionTitle}>試合分析</Text>
         <View style={styles.analysisBox}>
           <Text style={styles.analysisText}>{prediction.tacticalAnalysis}</Text>
         </View>

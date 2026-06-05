@@ -27,6 +27,7 @@ const GEMINI_MODELS = [
 ];
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const MAX_INLINE_IMAGE_BYTES = 18 * 1024 * 1024;
+const GEMINI_TIMEOUT_MS = 45000;
 
 const FORMATION_RESPONSE_SCHEMA = {
   type: 'OBJECT',
@@ -199,7 +200,7 @@ async function postGeminiGenerateContent(payload: any) {
           headers: {
             'Content-Type': 'application/json',
           },
-          timeout: 90000,
+          timeout: GEMINI_TIMEOUT_MS,
         }
       );
     } catch (error) {
@@ -221,7 +222,7 @@ async function postGeminiGenerateContent(payload: any) {
                 headers: {
                   'Content-Type': 'application/json',
                 },
-                timeout: 90000,
+                timeout: GEMINI_TIMEOUT_MS,
               }
             );
           } catch (fallbackError) {
@@ -309,14 +310,14 @@ function summarizeFormation(formation: string, teamLabel: string) {
 function formatPlayerMention(teamLabel: string, players: string[]) {
   const positionedPlayers = parsePositionedPlayers(players).slice(0, 5);
   if (positionedPlayers.length === 0) {
-    return `${teamLabel}は選手名が不足しているため、個別の役割は断定せず配置面を中心に見ます。`;
+    return `${teamLabel}は配置全体のバランスを中心に、ライン間の距離とサイドの使い方が焦点になります。`;
   }
 
   const names = positionedPlayers
     .map((player) => (player.position ? `${player.position}の${player.name}` : player.name))
     .join('、');
 
-  return `${teamLabel}の読み取れたメンバーには${names}などが含まれます。ポジション表記がある選手はその配置として扱い、表記がない選手は個別の役割を断定せず、フォーメーション全体の噛み合わせを優先して評価します。`;
+  return `${teamLabel}は${names}を軸に、ポジション上の役割と個々の特徴をどう試合展開に結びつけるかがポイントになります。`;
 }
 
 function buildTacticalAnalysisFallback(
@@ -327,7 +328,11 @@ function buildTacticalAnalysisFallback(
   homePlayers: string[],
   awayPlayers: string[]
 ) {
-  return `${summarizeFormation(homeFormation, homeTeam)}一方、${summarizeFormation(awayFormation, awayTeam)}${formatPlayerMention(homeTeam, homePlayers)}${formatPlayerMention(awayTeam, awayPlayers)}総合的には、個人名からプレー内容を決め打ちせず、両チームの配置とライン間の噛み合わせから見ると、中盤の支配とサイドの背後管理が勝敗を分ける展開になりそうです。`;
+  return `${summarizeFormation(homeFormation, homeTeam)}一方、${summarizeFormation(awayFormation, awayTeam)}${formatPlayerMention(homeTeam, homePlayers)}${formatPlayerMention(awayTeam, awayPlayers)}総合的には、選手の個性を生かす局面をどちらが多く作れるか、そして両チームの配置がぶつかる中盤とサイドで主導権を握れるかが勝敗を分ける展開になりそうです。`;
+}
+
+function hasMetaAnalysisLanguage(text: string) {
+  return /読み取|読め|解析|OCR|画像|入力情報|表記|データ|不明|不足/.test(text);
 }
 
 function normalizeProbability(value: unknown, fallback: number) {
@@ -422,7 +427,7 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
         responseMimeType: 'application/json',
         responseSchema: FORMATION_RESPONSE_SCHEMA,
         candidateCount: 1,
-        maxOutputTokens: 768,
+        maxOutputTokens: 512,
         temperature: 0.1,
       },
     });
@@ -435,7 +440,7 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
     const analysis = extractJsonObject(content);
     const normalizedAnalysis = normalizeFormationAnalysis(analysis, teamType);
     if (hasUsefulFormationAnalysis(normalizedAnalysis)) {
-      if (normalizedAnalysis.players.length < 6) {
+      if (normalizedAnalysis.players.length === 0) {
         try {
           const playerOcr = await readPlayersFromImage(
             imageBase64,
@@ -495,7 +500,7 @@ JSONのみで返してください。`;
         responseMimeType: 'application/json',
         responseSchema: FORMATION_RESPONSE_SCHEMA,
         candidateCount: 1,
-        maxOutputTokens: 768,
+        maxOutputTokens: 512,
         temperature: 0,
       },
     });
@@ -506,7 +511,7 @@ JSONのみで返してください。`;
     }
 
     const retryAnalysis = normalizeFormationAnalysis(extractJsonObject(retryContent), teamType);
-    if (retryAnalysis.players.length < 6) {
+    if (retryAnalysis.players.length === 0) {
       try {
         const playerOcr = await readPlayersFromImage(
           imageBase64,
@@ -581,7 +586,7 @@ JSONのみで返してください。`;
       responseMimeType: 'application/json',
       responseSchema: PLAYER_OCR_RESPONSE_SCHEMA,
       candidateCount: 1,
-      maxOutputTokens: 768,
+      maxOutputTokens: 384,
       temperature: 0,
     },
   });
@@ -627,7 +632,7 @@ export async function predictMatchOutcome(
   try {
     assertGeminiApiKey();
 
-    const prompt = `あなたはプロのサッカー戦術アナリストです。以下の試合情報をもとに、日本語で試合展開と勝敗予測を作成してください。
+    const prompt = `あなたはテレビ中継で解説するプロのサッカーアナリストです。以下の試合情報をもとに、日本語で試合分析と勝敗予測を作成してください。
 
 ホームチーム: ${homeTeam}
 ホームのフォーメーション: ${homeFormation}
@@ -640,27 +645,27 @@ ${formatLineupForPrompt(homePlayers)}
 ${formatLineupForPrompt(awayPlayers)}
 
 必ず日本語で、具体的な試合展開、攻撃・守備の噛み合わせ、勝敗予測の理由を説明してください。
-戦術分析は300〜500文字にしてください。
-戦術分析では、必ず両チームのフォーメーションに言及してください。
-フォーメーションから分かるライン構成、サイドの使い方、中央の人数、守備時の形を優先して分析してください。
+試合分析は300〜500文字にしてください。
+試合分析では、次の2点を必ず踏まえてください。
+1. 選手名から高い確度で想定できるプレースタイル、力量、ポジション適性、得意な局面。
+2. 両チームのフォーメーションによるライン構成、中央の人数、サイドの優位、守備時の形、噛み合わせ。
 選手に "CF: 山田" のようなポジション表記がある場合は、そのポジションとして扱ってください。
-選手名が入力されている場合は、各チームから1〜3名ずつ自然に含めてください。
+選手名がある場合は、各チームから1〜3名ずつ自然に含め、選手の特徴とフォーメーション上の役割を結びつけてください。
 実在のサッカー選手として高い確度で識別できる場合は、その選手から一般的に想定されるプレースタイル、力量、ポジション適性を試合予想に反映してください。
-ただし同姓同名や読み取り違いの可能性がある場合、個人能力を断定せず「読み取れたメンバー」として扱ってください。
-ポジション表記や入力情報から分からない特徴を作らないでください。
-例えばCBの選手をサイド突破の中心、GKを前線の起点、CFを守備統率役のように書かないでください。
-選手名は、ポジションとフォーメーション上の役割に沿って扱い、個人能力の特徴は推測で断定しないでください。
-選手名が不足している場合は無理に架空の名前を作らず、「中盤」「前線」「サイド」「最終ライン」など役割で説明してください。
+同姓同名や識別の確度が低い場合は、断定的な個人能力評価を避け、ポジションと配置から自然に言える範囲で分析してください。
+ポジションと矛盾する特徴を作らないでください。例えばCBをサイド突破の中心、GKを前線の起点、CFを守備統率役のようには書かないでください。
+選手名が少ない場合は架空の名前を作らず、「中盤」「前線」「サイド」「最終ライン」など役割で説明してください。
 ホームを常に優勢にしないでください。フォーメーションの噛み合わせから中立に判断してください。
 ホームチームには移動負担の少なさ、会場適応、サポーターの後押しを小さな補正として考慮してください。ただし戦力やフォーメーション差を上回るほど過大評価しないでください。
-文調は、テレビ中継の優秀な解説者・戦術アナリストのように、落ち着いて具体的で説得力のある日本語にしてください。
+文調は、テレビ中継の優秀な解説者・アナリストのように、落ち着いて具体的で説得力のある日本語にしてください。
+「読み取れた」「画像」「解析」「入力情報」「不明」「不足」など、アプリ内部の処理やデータ状態を説明する言葉は使わないでください。
 返答は有効なJSONのみで、この形式にしてください:
 {
   "predictedScore": "X-Y",
   "homeWinProbability": 0-100,
   "drawProbability": 0-100,
   "awayWinProbability": 0-100,
-  "tacticalAnalysis": "300〜500文字の日本語の戦術分析"
+  "tacticalAnalysis": "300〜500文字の日本語の試合分析"
 }
 
 重要: 3つの確率は必ず合計100にしてください。英語、Markdown、説明文、コードブロックは含めないでください。`;
@@ -705,6 +710,10 @@ ${formatLineupForPrompt(awayPlayers)}
     }
 
     const tacticalAnalysis = ensureJapaneseText(prediction.tacticalAnalysis, fallbackAnalysis);
+    const polishedAnalysis =
+      tacticalAnalysis.length >= 80 && !hasMetaAnalysisLanguage(tacticalAnalysis)
+        ? tacticalAnalysis
+        : fallbackAnalysis;
 
     return {
       homeTeam,
@@ -717,7 +726,7 @@ ${formatLineupForPrompt(awayPlayers)}
       homeWinProbability: normalizeProbability(prediction.homeWinProbability, 33),
       drawProbability: normalizeProbability(prediction.drawProbability, 34),
       awayWinProbability: normalizeProbability(prediction.awayWinProbability, 33),
-      tacticalAnalysis: tacticalAnalysis.length >= 80 ? tacticalAnalysis : fallbackAnalysis,
+      tacticalAnalysis: polishedAnalysis,
     };
   } catch (error) {
     console.error('Error predicting match outcome:', error);
