@@ -25,9 +25,15 @@ const GEMINI_MODELS = [
   process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash',
   'gemini-2.0-flash',
 ];
+const GEMINI_VISION_MODELS = [
+  process.env.EXPO_PUBLIC_GEMINI_VISION_MODEL || 'gemini-2.5-pro',
+  process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash',
+  'gemini-2.0-flash',
+];
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const MAX_INLINE_IMAGE_BYTES = 18 * 1024 * 1024;
-const GEMINI_TIMEOUT_MS = 45000;
+const GEMINI_TIMEOUT_MS = 60000;
+const MIN_PLAYERS_FOR_CONFIDENT_READ = 5;
 
 const FORMATION_RESPONSE_SCHEMA = {
   type: 'OBJECT',
@@ -168,6 +174,10 @@ function hasUsefulFormationAnalysis(analysis: FormationAnalysis) {
   return analysis.formation !== '未解析' || analysis.players.length > 0;
 }
 
+function needsPlayerOcrRetry(analysis: FormationAnalysis) {
+  return analysis.formation === '未解析' || analysis.players.length < MIN_PLAYERS_FOR_CONFIDENT_READ;
+}
+
 function mergePlayerLists(primaryPlayers: string[], secondaryPlayers: string[]) {
   return normalizePlayers([...primaryPlayers, ...secondaryPlayers]).slice(0, 11);
 }
@@ -186,9 +196,9 @@ function removeResponseSchema(payload: any) {
   };
 }
 
-async function postGeminiGenerateContent(payload: any) {
+async function postGeminiGenerateContent(payload: any, modelList = GEMINI_MODELS) {
   let lastError: unknown = null;
-  const models = Array.from(new Set(GEMINI_MODELS.filter(Boolean)));
+  const models = Array.from(new Set(modelList.filter(Boolean)));
   const apiKey = getGeminiApiKey();
 
   for (const model of models) {
@@ -382,9 +392,14 @@ export async function analyzeFormationImage(
 アップロードされた${teamType === 'home' ? 'ホーム' : 'アウェイ'}チームの画像を解析してください。
 画像はスマートフォンのカメラ写真、テレビ画面の撮影、WebページやSNSのスクリーンショット、縦長・横長、斜め撮影、影、反射、ぼけ、低解像度を含む可能性があります。
 
+最重要タスク:
+- この画像から、対象チームのフォーメーションと先発11名の選手名を読み込んでください。
+- フォーメーションは、文字で書かれていなくても選手配置から必ず推定してください。
+- 選手名は、完全に読めない場合でも、姓・短縮名・ローマ字・カタカナなど画像上で読める文字列を最大11名まで返してください。
+
 必ず以下を抽出してください:
 1. チーム名。見えない場合は "${teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'}"。
-2. フォーメーション。文字が読めない場合でも、GKを除く10人の配置から "4-3-3", "4-2-3-1", "3-4-2-1" などを推定してください。
+2. フォーメーション。文字が読めない場合でも、GKを除く10人の配置から "4-3-3", "4-2-3-1", "3-4-2-1" などを必ず推定してください。
 3. 選手名。日本語、英語、ローマ字、カタカナ、漢字、ひらがな表記を読み取ってください。背番号だけの場合は選手名に含めないでください。
 
 読み取り手順:
@@ -392,6 +407,8 @@ export async function analyzeFormationImage(
 - OCRとして、ピッチ上の小さな白文字、テレビ中継のスタメン表、SNS画像のテキストラベルを優先的に読み取ってください。
 - 画像が斜め、暗い、反射、粗い場合でも、拡大して読む前提で判断してください。
 - GK、DF、MF、FWのラインごとに人数を数え、フォーメーションを推定してください。
+- フォーメーション名が見えない場合でも、選手アイコンや名前ラベルの縦横位置からライン人数を数えてください。
+- 文字が小さい場合は、ピッチ上のラベルとスタメン表を照合してください。
 - 選手名はピッチ上またはスタメン欄にある11名を優先してください。
 - players配列は、可能な限り "GK: 選手名", "CB: 選手名", "SB: 選手名", "DMF: 選手名", "OMF: 選手名", "CF: 選手名" のようにポジション付きで返してください。
 - ポジションが不明な選手は名前だけ返してよいですが、配置から推定できる場合は必ずポジションを付けてください。
@@ -402,7 +419,8 @@ export async function analyzeFormationImage(
 
 カメラ写真の場合は、画像全体の向きとピッチ上の上下左右を推定し、各ラインの人数からフォーメーションを判断してください。
 選手名が一部しか読めない場合も、読める名前だけ返してください。
-できるだけ短時間で判断し、推測できる場合は "未解析" ではなく最も可能性が高いフォーメーションを返してください。
+画像内にピッチ図・スタメン表・選手配置のいずれかが見える場合は "未解析" ではなく最も可能性が高いフォーメーションを返してください。
+画像がサッカーのフォーメーション図ではないと明確に判断できる場合のみ、formationを"未解析"、playersを空配列にしてください。
 confidenceは0から1で、読み取り確信度を返してください。
 
 Markdown、説明文、コードブロックは絶対に含めないでください。`;
@@ -427,10 +445,10 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
         responseMimeType: 'application/json',
         responseSchema: FORMATION_RESPONSE_SCHEMA,
         candidateCount: 1,
-        maxOutputTokens: 512,
+        maxOutputTokens: 900,
         temperature: 0.1,
       },
-    });
+    }, GEMINI_VISION_MODELS);
 
     const content = extractResponseText(response.data);
     if (!content) {
@@ -440,7 +458,7 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
     const analysis = extractJsonObject(content);
     const normalizedAnalysis = normalizeFormationAnalysis(analysis, teamType);
     if (hasUsefulFormationAnalysis(normalizedAnalysis)) {
-      if (normalizedAnalysis.players.length === 0) {
+      if (needsPlayerOcrRetry(normalizedAnalysis)) {
         try {
           const playerOcr = await readPlayersFromImage(
             imageBase64,
@@ -476,7 +494,7 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
 - 画像の中のフォーメーション図、スタメン表、ピッチ上の選手名ラベルだけに集中してください。
 - ブラウザUI、広告、記事本文、スコア表示、SNSの余計な文字は無視してください。
 - フォーメーション名が明記されていなくても、GKを除く10人のライン人数から必ず最も近い形を推定してください。
-- 選手名は読める範囲だけでよいので、最大11名まで返してください。
+- 選手名は読める範囲だけでよいので、姓・短縮名・ローマ字・カタカナなど最大11名まで返してください。
 - players配列は可能なら "GK: 名前", "CB: 名前", "DMF: 名前", "CF: 名前" のようにポジション付きで返してください。
 - それでも読めない場合のみ、formationを"未解析"、playersを空配列にしてください。
 
@@ -500,10 +518,10 @@ JSONのみで返してください。`;
         responseMimeType: 'application/json',
         responseSchema: FORMATION_RESPONSE_SCHEMA,
         candidateCount: 1,
-        maxOutputTokens: 512,
+        maxOutputTokens: 900,
         temperature: 0,
       },
-    });
+    }, GEMINI_VISION_MODELS);
 
     const retryContent = extractResponseText(retryResponse.data);
     if (!retryContent) {
@@ -511,7 +529,7 @@ JSONのみで返してください。`;
     }
 
     const retryAnalysis = normalizeFormationAnalysis(extractJsonObject(retryContent), teamType);
-    if (retryAnalysis.players.length === 0) {
+    if (needsPlayerOcrRetry(retryAnalysis)) {
       try {
         const playerOcr = await readPlayersFromImage(
           imageBase64,
@@ -550,6 +568,7 @@ async function readPlayersFromImage(
   const prompt = `あなたはサッカー画像の選手名OCR専門家です。
 この画像から、${teamType === 'home' ? 'ホーム' : 'アウェイ'}チームの選手名だけをできる限り読み取ってください。
 フォーメーション推定よりも、選手名ラベル・スタメン表・ピッチ上の小さな文字の読み取りを最優先してください。
+この画像から対象チームの先発11名の選手名を読み込んでください。
 
 前提:
 - 既知のフォーメーション候補: ${knownFormation}
@@ -561,7 +580,7 @@ async function readPlayersFromImage(
 - サッカー選手名らしい文字列のみをplayersに入れてください。
 - 背番号だけ、国名だけ、ポジション名だけ、クラブ名だけ、広告文、UI文字は除外してください。
 - 日本語、カタカナ、漢字、英字、ローマ字を読んでください。
-- 読める名前が一部だけでも返してください。最大11名です。
+- 読める名前が一部だけでも返してください。姓だけ、短縮名、ローマ字、カタカナでも選手名らしければ返してください。最大11名です。
 - 配置が分かる場合は "GK: 名前", "CB: 名前", "SB: 名前", "DMF: 名前", "OMF: 名前", "CF: 名前" のようにポジション付きで返してください。
 - 配置が分からない場合は名前だけでも構いません。
 - 選手名を推測で捏造しないでください。読めた名前だけ返してください。
@@ -586,10 +605,10 @@ JSONのみで返してください。`;
       responseMimeType: 'application/json',
       responseSchema: PLAYER_OCR_RESPONSE_SCHEMA,
       candidateCount: 1,
-      maxOutputTokens: 384,
+      maxOutputTokens: 700,
       temperature: 0,
     },
-  });
+  }, GEMINI_VISION_MODELS);
 
   const content = extractResponseText(response.data);
   if (!content) {
