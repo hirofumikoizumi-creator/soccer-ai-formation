@@ -196,7 +196,7 @@ export default function App() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" backgroundColor={colors.background} />
+      <StatusBar style="light" />
 
       {currentScreen === 'home' && (
         <HomeScreen

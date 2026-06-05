@@ -21,12 +21,12 @@ export interface PredictionResult {
   tacticalAnalysis: string;
 }
 
-const GEMINI_API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
 const GEMINI_MODELS = [
   process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash',
   'gemini-2.0-flash',
 ];
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+const MAX_INLINE_IMAGE_BYTES = 18 * 1024 * 1024;
 
 const FORMATION_RESPONSE_SCHEMA = {
   type: 'OBJECT',
@@ -56,9 +56,42 @@ const PLAYER_OCR_RESPONSE_SCHEMA = {
 };
 
 function assertGeminiApiKey() {
-  if (!GEMINI_API_KEY) {
+  if (!getGeminiApiKey()) {
     throw new Error('AI解析キーがアプリに設定されていません');
   }
+}
+
+function getGeminiApiKey() {
+  return process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
+}
+
+function stripDataUrlPrefix(imageBase64: string) {
+  return imageBase64.replace(/^data:image\/[a-z0-9.+-]+;base64,/i, '').replace(/\s/g, '');
+}
+
+function estimateBase64Bytes(imageBase64: string) {
+  const padding = imageBase64.endsWith('==') ? 2 : imageBase64.endsWith('=') ? 1 : 0;
+  return Math.floor((imageBase64.length * 3) / 4) - padding;
+}
+
+function prepareInlineImage(imageBase64: string, mimeType: string) {
+  const data = stripDataUrlPrefix(imageBase64);
+  if (!data) {
+    throw new Error('画像データをAI解析用に読み込めませんでした');
+  }
+
+  if (estimateBase64Bytes(data) > MAX_INLINE_IMAGE_BYTES) {
+    throw new Error('画像サイズが大きすぎます。写真を少しトリミングしてから再度お試しください');
+  }
+
+  const normalizedMimeType = mimeType.toLowerCase() === 'image/jpg' ? 'image/jpeg' : mimeType;
+
+  return {
+    mimeType: /^image\/(jpeg|png|webp|heic|heif)$/i.test(normalizedMimeType)
+      ? normalizedMimeType
+      : 'image/jpeg',
+    data,
+  };
 }
 
 function extractJsonObject(text: string) {
@@ -74,6 +107,23 @@ function extractJsonObject(text: string) {
   }
 
   return JSON.parse(cleaned.slice(start, end + 1));
+}
+
+function extractResponseText(data: any) {
+  const parts = data?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) {
+    return '';
+  }
+
+  return parts
+    .map((part) => {
+      if (typeof part?.text === 'string') {
+        return part.text;
+      }
+      return '';
+    })
+    .join('')
+    .trim();
 }
 
 function normalizePlayers(players: unknown): string[] {
@@ -121,14 +171,29 @@ function mergePlayerLists(primaryPlayers: string[], secondaryPlayers: string[]) 
   return normalizePlayers([...primaryPlayers, ...secondaryPlayers]).slice(0, 11);
 }
 
-async function postGeminiGenerateContent(payload: unknown) {
+function removeResponseSchema(payload: any) {
+  if (!payload?.generationConfig?.responseSchema) {
+    return null;
+  }
+
+  const generationConfig = { ...payload.generationConfig };
+  delete generationConfig.responseSchema;
+
+  return {
+    ...payload,
+    generationConfig,
+  };
+}
+
+async function postGeminiGenerateContent(payload: any) {
   let lastError: unknown = null;
   const models = Array.from(new Set(GEMINI_MODELS.filter(Boolean)));
+  const apiKey = getGeminiApiKey();
 
   for (const model of models) {
     try {
       return await axios.post(
-        `${GEMINI_API_BASE_URL}/${model}:generateContent?key=${GEMINI_API_KEY}`,
+        `${GEMINI_API_BASE_URL}/${model}:generateContent?key=${apiKey}`,
         payload,
         {
           headers: {
@@ -145,6 +210,25 @@ async function postGeminiGenerateContent(payload: unknown) {
           data: error.response?.data,
           message: error.message,
         });
+
+        const fallbackPayload = error.response?.status === 400 ? removeResponseSchema(payload) : null;
+        if (fallbackPayload) {
+          try {
+            return await axios.post(
+              `${GEMINI_API_BASE_URL}/${model}:generateContent?key=${apiKey}`,
+              fallbackPayload,
+              {
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                timeout: 90000,
+              }
+            );
+          } catch (fallbackError) {
+            lastError = fallbackError;
+            console.error(`Gemini schema-free retry failed with model ${model}:`, fallbackError);
+          }
+        }
       } else {
         console.error(`Gemini request failed with model ${model}:`, error);
       }
@@ -287,6 +371,7 @@ export async function analyzeFormationImage(
 ): Promise<FormationAnalysis> {
   try {
     assertGeminiApiKey();
+    const inlineImage = prepareInlineImage(imageBase64, mimeType);
 
     const prompt = `あなたはサッカーのフォーメーション画像、テレビ中継のスタメン表示、スマホのスクリーンショットを読む専門家です。
 アップロードされた${teamType === 'home' ? 'ホーム' : 'アウェイ'}チームの画像を解析してください。
@@ -326,8 +411,8 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
             },
             {
               inline_data: {
-                mime_type: mimeType,
-                data: imageBase64,
+                mime_type: inlineImage.mimeType,
+                data: inlineImage.data,
               },
             },
           ],
@@ -342,7 +427,7 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
       },
     });
 
-    const content = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const content = extractResponseText(response.data);
     if (!content) {
       throw new Error('No response from Gemini API');
     }
@@ -399,8 +484,8 @@ JSONのみで返してください。`;
             { text: retryPrompt },
             {
               inline_data: {
-                mime_type: mimeType,
-                data: imageBase64,
+                mime_type: inlineImage.mimeType,
+                data: inlineImage.data,
               },
             },
           ],
@@ -415,7 +500,7 @@ JSONのみで返してください。`;
       },
     });
 
-    const retryContent = retryResponse.data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const retryContent = extractResponseText(retryResponse.data);
     if (!retryContent) {
       return normalizedAnalysis;
     }
@@ -456,6 +541,7 @@ async function readPlayersFromImage(
   mimeType = 'image/jpeg',
   knownFormation = '未解析'
 ) {
+  const inlineImage = prepareInlineImage(imageBase64, mimeType);
   const prompt = `あなたはサッカー画像の選手名OCR専門家です。
 この画像から、${teamType === 'home' ? 'ホーム' : 'アウェイ'}チームの選手名だけをできる限り読み取ってください。
 フォーメーション推定よりも、選手名ラベル・スタメン表・ピッチ上の小さな文字の読み取りを最優先してください。
@@ -484,8 +570,8 @@ JSONのみで返してください。`;
           { text: prompt },
           {
             inline_data: {
-              mime_type: mimeType,
-              data: imageBase64,
+              mime_type: inlineImage.mimeType,
+              data: inlineImage.data,
             },
           },
         ],
@@ -500,7 +586,7 @@ JSONのみで返してください。`;
     },
   });
 
-  const content = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
+  const content = extractResponseText(response.data);
   if (!content) {
     return {
       teamName: teamType === 'home' ? 'ホームチーム' : 'アウェイチーム',
