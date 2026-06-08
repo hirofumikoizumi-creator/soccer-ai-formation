@@ -18,13 +18,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
-        run: |
-          rm -f package-lock.json
-          npm install
+        run: npm ci
 
       - name: Install EAS CLI
         run: npm install -g eas-cli
@@ -56,9 +54,9 @@ jobs:
       - name: Build iOS app with EAS
         id: eas-build
         run: |
-          eas build --platform ios --profile production --non-interactive --wait --json > eas-build.json
-          cat eas-build.json
-          BUILD_ID=$(node -e "const fs = require('fs'); const data = JSON.parse(fs.readFileSync('eas-build.json', 'utf8')); const build = Array.isArray(data) ? data[0] : data; if (!build || !build.id) throw new Error('Missing EAS build id'); console.log(build.id);")
+          eas build --platform ios --profile production --non-interactive --wait --json > /tmp/eas-build.json
+          cat /tmp/eas-build.json
+          BUILD_ID=$(node -e "const fs = require('fs'); const data = JSON.parse(fs.readFileSync('/tmp/eas-build.json', 'utf8')); const build = Array.isArray(data) ? data[0] : data; if (!build || !build.id) throw new Error('Missing EAS build id'); console.log(build.id);")
           echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
           echo "EAS build id: $BUILD_ID"
         env:
