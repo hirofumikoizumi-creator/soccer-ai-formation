@@ -11,12 +11,13 @@
     ],
     "ios": {
       "bundleIdentifier": "com.gsw.socceraiyosou",
-      "buildNumber": "36",
+      "buildNumber": "37",
       "infoPlist": {
         "CFBundleDisplayName": "AI予想",
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "撮影したフォーメーション画像をAI解析するためにカメラを使用します。",
-        "NSPhotoLibraryUsageDescription": "選択したフォーメーション画像をAI解析するために写真ライブラリを使用します。"
+        "NSPhotoLibraryUsageDescription": "選択したフォーメーション画像をAI解析するために写真ライブラリを使用します。",
+        "NSUserTrackingUsageDescription": "広告配信、広告効果測定、不正防止のためにデバイス識別子を使用する場合があります。"
       }
     },
     "android": {
@@ -46,14 +47,14 @@
         {
           "androidAppId": "ca-app-pub-3940256099942544~3347511713",
           "iosAppId": "ca-app-pub-5840457424714744~2343444534",
-          "userTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you."
+          "userTrackingUsageDescription": "広告配信、広告効果測定、不正防止のためにデバイス識別子を使用する場合があります。"
         }
       ]
     ],
     "react-native-google-mobile-ads": {
       "android_app_id": "ca-app-pub-3940256099942544~3347511713",
       "ios_app_id": "ca-app-pub-5840457424714744~2343444534",
-      "user_tracking_usage_description": "This identifier will be used to deliver personalized ads to you."
+      "user_tracking_usage_description": "広告配信、広告効果測定、不正防止のためにデバイス識別子を使用する場合があります。"
     }
   }
 }

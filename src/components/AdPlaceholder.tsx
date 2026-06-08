@@ -25,7 +25,9 @@ export default function AdPlaceholder({
 
   useEffect(() => {
     try {
-      setAdsModule(require('react-native-google-mobile-ads'));
+      const mobileAds = require('react-native-google-mobile-ads');
+      mobileAds.default?.().initialize();
+      setAdsModule(mobileAds);
     } catch (error) {
       console.warn('Google Mobile Ads SDK is unavailable', error);
       if (type === 'interstitial' || type === 'rewarded') {

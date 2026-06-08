@@ -13,11 +13,13 @@ import { colors, shadows } from '../theme';
 interface PredictionScreenProps {
   prediction: PredictionData;
   onReset: () => void;
+  adsEnabled: boolean;
 }
 
 export default function PredictionScreen({
   prediction,
   onReset,
+  adsEnabled,
 }: PredictionScreenProps) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -148,9 +150,11 @@ export default function PredictionScreen({
       </View>
 
       {/* Ad Placeholder */}
-      <View style={styles.adContainer}>
-        <AdPlaceholder type="banner" />
-      </View>
+      {adsEnabled && (
+        <View style={styles.adContainer}>
+          <AdPlaceholder type="banner" />
+        </View>
+      )}
 
       <View style={styles.noticeBox}>
         <Text style={styles.noticeTitle}>ご利用上の注意</Text>

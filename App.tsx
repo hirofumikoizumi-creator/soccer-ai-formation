@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
-import { View, ActivityIndicator, StyleSheet, Alert } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Alert, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import {
+  getTrackingPermissionsAsync,
+  requestTrackingPermissionsAsync,
+} from 'expo-tracking-transparency';
 import HomeScreen from './src/screens/HomeScreen';
 import ConfirmationScreen from './src/screens/ConfirmationScreen';
 import PredictionScreen from './src/screens/PredictionScreen';
@@ -28,9 +32,38 @@ export default function App() {
   const [showRewardedAd, setShowRewardedAd] = useState(false);
   const [rewardPurpose, setRewardPurpose] = useState<'prediction' | 'imageRead'>('prediction');
   const [usage, setUsage] = useState<AnalysisUsage>(createEmptyUsage());
+  const [trackingPermissionReady, setTrackingPermissionReady] = useState(false);
 
   React.useEffect(() => {
     loadAnalysisUsage().then(setUsage);
+  }, []);
+
+  React.useEffect(() => {
+    let mounted = true;
+
+    const requestTrackingPermission = async () => {
+      try {
+        if (Platform.OS === 'ios') {
+          const permission = await getTrackingPermissionsAsync();
+
+          if (permission.status === 'undetermined' && permission.canAskAgain) {
+            await requestTrackingPermissionsAsync();
+          }
+        }
+      } catch (error) {
+        console.warn('Unable to request tracking permission', error);
+      } finally {
+        if (mounted) {
+          setTrackingPermissionReady(true);
+        }
+      }
+    };
+
+    requestTrackingPermission();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const persistUsage = async (nextUsage: AnalysisUsage) => {
@@ -226,13 +259,17 @@ export default function App() {
       )}
 
       {currentScreen === 'prediction' && prediction && (
-        <PredictionScreen prediction={prediction} onReset={handleReset} />
+        <PredictionScreen
+          prediction={prediction}
+          onReset={handleReset}
+          adsEnabled={trackingPermissionReady}
+        />
       )}
 
       {/* Loading and Ad Overlay */}
       {showAd && (
         <View style={styles.overlay}>
-          <AdPlaceholder type="interstitial" />
+          {trackingPermissionReady && <AdPlaceholder type="interstitial" />}
           {loading && (
             <ActivityIndicator
               size="large"
@@ -243,7 +280,7 @@ export default function App() {
         </View>
       )}
 
-      {showRewardedAd && (
+      {showRewardedAd && trackingPermissionReady && (
         <AdPlaceholder
           type="rewarded"
           onRewardEarned={handleRewardEarned}
