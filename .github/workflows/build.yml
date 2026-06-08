@@ -51,6 +51,9 @@ jobs:
           mkdir -p ~/private_keys
           echo "${{ secrets.APP_STORE_CONNECT_API_KEY }}" > ~/private_keys/AuthKey_${{ secrets.APP_STORE_CONNECT_KEY_ID }}.p8
 
+      - name: Restore generated lockfile changes
+        run: git checkout -- yarn.lock
+
       - name: Build iOS app with EAS
         id: eas-build
         run: |
