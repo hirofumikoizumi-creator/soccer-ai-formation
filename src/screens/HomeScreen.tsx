@@ -38,7 +38,8 @@ function createPendingFormation(
   imageUri: string,
   imageBase64?: string,
   mimeType?: string,
-  teamHint?: string
+  teamHint?: string,
+  debugLog: string[] = []
 ): FormationData {
   return {
     teamName: teamHint || (teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'),
@@ -48,6 +49,7 @@ function createPendingFormation(
     imageBase64,
     mimeType,
     teamHint,
+    debugLog,
   };
 }
 
@@ -57,6 +59,7 @@ function createManualFormation(teamType: 'home' | 'away', teamHint?: string): Fo
     formation: '4-2-3-1',
     players: [],
     teamHint,
+    debugLog: ['手入力モードで作成'],
   };
 }
 
@@ -93,6 +96,25 @@ export default function HomeScreen({
     return value === '指定なし' ? undefined : value;
   };
 
+  const appendDebugLog = (teamType: 'home' | 'away', message: string) => {
+    const updater = (formation: FormationData | null) => {
+      if (!formation) {
+        return formation;
+      }
+
+      return {
+        ...formation,
+        debugLog: [...(formation.debugLog || []), message].slice(-18),
+      };
+    };
+
+    if (teamType === 'home') {
+      setHomeFormation(updater);
+    } else {
+      setAwayFormation(updater);
+    }
+  };
+
   const handleSelectImage = async (teamType: 'home' | 'away') => {
     try {
       const teamHint = getTeamHint(teamType);
@@ -102,13 +124,19 @@ export default function HomeScreen({
         return;
       }
 
+      const startedAt = new Date().toLocaleTimeString('ja-JP', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
       setAnalyzing(teamType);
       const pendingFormation = createPendingFormation(
         teamType,
         image.uri,
         image.base64,
         image.mimeType,
-        teamHint
+        teamHint,
+        [`${startedAt} 画像選択: ${image.mimeType} / 補正=${teamHint || 'なし'} / 解析画像${image.analysisImages?.length || 0}枚`]
       );
       pendingFormation.analysisImages = image.analysisImages;
       if (teamType === 'home') {
@@ -122,7 +150,8 @@ export default function HomeScreen({
         teamType,
         image.mimeType,
         image.analysisImages,
-        teamHint
+        teamHint,
+        (message) => appendDebugLog(teamType, message)
       );
 
       const formationData: FormationData = {
@@ -134,6 +163,7 @@ export default function HomeScreen({
         mimeType: image.mimeType,
         analysisImages: image.analysisImages,
         teamHint,
+        debugLog: analysis.debugLog,
       };
 
       if (teamType === 'home') {
@@ -146,6 +176,7 @@ export default function HomeScreen({
         '画像を登録しました',
         `${getAnalysisErrorMessage(error)}\n\n確認画面でチーム名やフォーメーションを手入力できます。`
       );
+      appendDebugLog(teamType, `画面エラー: ${getAnalysisErrorMessage(error)}`);
       console.error(error);
     } finally {
       setAnalyzing(null);
@@ -161,13 +192,19 @@ export default function HomeScreen({
         return;
       }
 
+      const startedAt = new Date().toLocaleTimeString('ja-JP', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
       setAnalyzing(teamType);
       const pendingFormation = createPendingFormation(
         teamType,
         image.uri,
         image.base64,
         image.mimeType,
-        teamHint
+        teamHint,
+        [`${startedAt} カメラ撮影: ${image.mimeType} / 補正=${teamHint || 'なし'} / 解析画像${image.analysisImages?.length || 0}枚`]
       );
       pendingFormation.analysisImages = image.analysisImages;
       if (teamType === 'home') {
@@ -181,7 +218,8 @@ export default function HomeScreen({
         teamType,
         image.mimeType,
         image.analysisImages,
-        teamHint
+        teamHint,
+        (message) => appendDebugLog(teamType, message)
       );
 
       const formationData: FormationData = {
@@ -193,6 +231,7 @@ export default function HomeScreen({
         mimeType: image.mimeType,
         analysisImages: image.analysisImages,
         teamHint,
+        debugLog: analysis.debugLog,
       };
 
       if (teamType === 'home') {
@@ -205,6 +244,7 @@ export default function HomeScreen({
         '画像を登録しました',
         `${getAnalysisErrorMessage(error)}\n\n確認画面でチーム名やフォーメーションを手入力できます。`
       );
+      appendDebugLog(teamType, `画面エラー: ${getAnalysisErrorMessage(error)}`);
       console.error(error);
     } finally {
       setAnalyzing(null);
@@ -252,12 +292,14 @@ export default function HomeScreen({
       }
 
       const activeTeamHint = getTeamHint(teamType) || formation.teamHint;
+      appendDebugLog(teamType, `再読み取り開始: 補正=${activeTeamHint || 'なし'}`);
       const analysis = await analyzeFormationImage(
         formation.imageBase64,
         teamType,
         formation.mimeType || 'image/jpeg',
         formation.analysisImages,
-        activeTeamHint
+        activeTeamHint,
+        (message) => appendDebugLog(teamType, message)
       );
       const formationData: FormationData = {
         teamName: analysis.teamName,
@@ -268,6 +310,7 @@ export default function HomeScreen({
         mimeType: formation.mimeType || 'image/jpeg',
         analysisImages: formation.analysisImages,
         teamHint: activeTeamHint,
+        debugLog: analysis.debugLog,
       };
 
       if (teamType === 'home') {
@@ -280,6 +323,7 @@ export default function HomeScreen({
         'AI解析に失敗しました',
         `${getAnalysisErrorMessage(error)}\n\n確認画面でチーム名やフォーメーションを手入力できます。`
       );
+      appendDebugLog(teamType, `画面エラー: ${getAnalysisErrorMessage(error)}`);
       console.error(error);
     } finally {
       setAnalyzing(null);
@@ -323,6 +367,16 @@ export default function HomeScreen({
           <Text style={styles.analysisWarning}>
             フォーメーションや選手名を読み取れていません。範囲指定して再読み取りするか、次の画面で手入力してください。
           </Text>
+        )}
+        {formation.debugLog && formation.debugLog.length > 0 && (
+          <View style={styles.debugPanel}>
+            <Text style={styles.debugTitle}>解析ログ</Text>
+            {formation.debugLog.slice(-10).map((line, index) => (
+              <Text key={`${teamType}-debug-${index}-${line}`} style={styles.debugText}>
+                {line}
+              </Text>
+            ))}
+          </View>
         )}
         {formation.imageUri && (
           <TouchableOpacity
@@ -707,6 +761,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     marginBottom: 12,
+  },
+  debugPanel: {
+    marginBottom: 12,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(3, 13, 32, 0.78)',
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+  },
+  debugTitle: {
+    color: colors.goldBright,
+    fontSize: 12,
+    fontWeight: '900',
+    marginBottom: 6,
+  },
+  debugText: {
+    color: colors.muted,
+    fontSize: 10,
+    lineHeight: 15,
   },
   changeButton: {
     backgroundColor: 'rgba(3, 13, 32, 0.72)',

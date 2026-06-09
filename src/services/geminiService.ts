@@ -6,6 +6,7 @@ export interface FormationAnalysis {
   formation: string;
   players: string[];
   confidence: number;
+  debugLog?: string[];
 }
 
 export interface PredictionResult {
@@ -35,6 +36,7 @@ const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/mo
 const MAX_INLINE_IMAGE_BYTES = 18 * 1024 * 1024;
 const GEMINI_TIMEOUT_MS = 60000;
 const MAX_ANALYSIS_IMAGES = 8;
+type AnalysisDebugLogger = (message: string) => void;
 
 const TEAM_PLAYER_DICTIONARIES: Record<string, string[]> = {
   'オランダ代表': [
@@ -523,7 +525,8 @@ async function readPlayersFromIndividualImages(
   mimeType: string,
   knownFormation: string,
   analysisImages?: AnalysisImage[],
-  teamHint?: string
+  teamHint?: string,
+  debug?: AnalysisDebugLogger
 ) {
   const sourceImages =
     analysisImages && analysisImages.length > 0
@@ -536,15 +539,18 @@ async function readPlayersFromIndividualImages(
 
   for (const image of sourceImages.slice(0, 4)) {
     try {
+      debug?.(`個別OCR開始: ${image.label}`);
       const result = await readPlayersFromImage(
         imageBase64,
         teamType,
         mimeType,
         knownFormation,
         [image],
-        teamHint
+        teamHint,
+        debug
       );
       mergedPlayers = mergePlayerLists(mergedPlayers, result.players);
+      debug?.(`個別OCR結果: ${image.label} ${result.players.length}名`);
       if (result.confidence > bestConfidence) {
         bestTeamName = result.teamName;
         bestConfidence = result.confidence;
@@ -568,9 +574,11 @@ async function readRawTextCandidatesFromImages(
   imageBase64: string,
   mimeType: string,
   analysisImages?: AnalysisImage[],
-  teamHint?: string
+  teamHint?: string,
+  debug?: AnalysisDebugLogger
 ) {
   const inlineImages = prepareInlineImages(imageBase64, mimeType, analysisImages);
+  debug?.(`生OCR開始: ${inlineImages.length}画像`);
   const dictionaryHint = buildDictionaryPrompt(teamHint);
   const prompt = `画像内の文字をOCRしてください。
 目的はサッカーのフォーメーション画像から、少しでも読める選手名を拾うことです。
@@ -599,7 +607,7 @@ ${dictionaryHint}
       maxOutputTokens: 900,
       temperature: 0,
     },
-  }, GEMINI_VISION_MODELS);
+  }, GEMINI_VISION_MODELS, debug);
 
   const content = extractResponseText(response.data);
   if (!content) {
@@ -610,6 +618,7 @@ ${dictionaryHint}
   }
 
   const result = extractJsonObject(content);
+  debug?.(`生OCR結果: ${Array.isArray(result.rawTextLines) ? result.rawTextLines.length : 0}行`);
   return {
     players: extractPlayerCandidatesFromTextLines(result.rawTextLines),
     confidence: typeof result.confidence === 'number' ? result.confidence : 0.4,
@@ -622,22 +631,26 @@ async function enrichFormationWithAllOcr(
   teamType: 'home' | 'away',
   mimeType: string,
   analysisImages?: AnalysisImage[],
-  teamHint?: string
+  teamHint?: string,
+  debug?: AnalysisDebugLogger
 ) {
   let players = analysis.players;
   let confidence = analysis.confidence;
   let teamName = analysis.teamName;
 
   try {
+    debug?.('選手名OCR開始');
     const playerOcr = await readPlayersFromImage(
       imageBase64,
       teamType,
       mimeType,
       analysis.formation,
       analysisImages,
-      teamHint
+      teamHint,
+      debug
     );
     players = mergePlayerLists(players, playerOcr.players);
+    debug?.(`選手名OCR結果: ${playerOcr.players.length}名`);
     confidence = Math.max(confidence, playerOcr.confidence);
     if (teamName === (teamType === 'home' ? 'ホームチーム' : 'アウェイチーム')) {
       teamName = playerOcr.teamName;
@@ -654,9 +667,11 @@ async function enrichFormationWithAllOcr(
         mimeType,
         analysis.formation,
         analysisImages,
-        teamHint
+        teamHint,
+        debug
       );
       players = mergePlayerLists(players, individualOcr.players);
+      debug?.(`個別OCR統合後: ${players.length}名`);
       confidence = Math.max(confidence, individualOcr.confidence);
       if (teamName === (teamType === 'home' ? 'ホームチーム' : 'アウェイチーム')) {
         teamName = individualOcr.teamName;
@@ -672,9 +687,11 @@ async function enrichFormationWithAllOcr(
         imageBase64,
         mimeType,
         analysisImages,
-        teamHint
+        teamHint,
+        debug
       );
       players = mergePlayerLists(players, rawOcr.players);
+      debug?.(`生OCR統合後: ${players.length}名`);
       confidence = Math.max(confidence, rawOcr.confidence);
     } catch (error) {
       console.warn('Raw OCR pass failed', error);
@@ -688,6 +705,10 @@ async function enrichFormationWithAllOcr(
     (analysis.formation === '未解析' || !analysis.formation)
       ? getTeamHintFormation(teamHint)
       : '';
+
+  if (fallbackPlayers.length > 0) {
+    debug?.(`画像OCRは0名。${teamHint}の候補${fallbackPlayers.length}名を表示`);
+  }
 
   return {
     ...analysis,
@@ -712,14 +733,19 @@ function removeResponseSchema(payload: any) {
   };
 }
 
-async function postGeminiGenerateContent(payload: any, modelList = GEMINI_MODELS) {
+async function postGeminiGenerateContent(
+  payload: any,
+  modelList = GEMINI_MODELS,
+  debug?: AnalysisDebugLogger
+) {
   let lastError: unknown = null;
   const models = Array.from(new Set(modelList.filter(Boolean)));
   const apiKey = getGeminiApiKey();
 
   for (const model of models) {
     try {
-      return await axios.post(
+      debug?.(`Gemini送信: ${model}`);
+      const response = await axios.post(
         `${GEMINI_API_BASE_URL}/${model}:generateContent?key=${apiKey}`,
         payload,
         {
@@ -729,9 +755,12 @@ async function postGeminiGenerateContent(payload: any, modelList = GEMINI_MODELS
           timeout: GEMINI_TIMEOUT_MS,
         }
       );
+      debug?.(`Gemini応答: ${model} HTTP ${response.status}`);
+      return response;
     } catch (error) {
       lastError = error;
       if (axios.isAxiosError(error)) {
+        debug?.(`Gemini失敗: ${model} HTTP ${error.response?.status || 'network'} ${error.message}`);
         console.error(`Gemini request failed with model ${model}:`, {
           status: error.response?.status,
           data: error.response?.data,
@@ -741,7 +770,8 @@ async function postGeminiGenerateContent(payload: any, modelList = GEMINI_MODELS
         const fallbackPayload = error.response?.status === 400 ? removeResponseSchema(payload) : null;
         if (fallbackPayload) {
           try {
-            return await axios.post(
+            debug?.(`Gemini再送信: ${model} schemaなし`);
+            const fallbackResponse = await axios.post(
               `${GEMINI_API_BASE_URL}/${model}:generateContent?key=${apiKey}`,
               fallbackPayload,
               {
@@ -751,8 +781,13 @@ async function postGeminiGenerateContent(payload: any, modelList = GEMINI_MODELS
                 timeout: GEMINI_TIMEOUT_MS,
               }
             );
+            debug?.(`Gemini再応答: ${model} HTTP ${fallbackResponse.status}`);
+            return fallbackResponse;
           } catch (fallbackError) {
             lastError = fallbackError;
+            if (axios.isAxiosError(fallbackError)) {
+              debug?.(`Gemini再失敗: ${model} HTTP ${fallbackError.response?.status || 'network'} ${fallbackError.message}`);
+            }
             console.error(`Gemini schema-free retry failed with model ${model}:`, fallbackError);
           }
         }
@@ -900,11 +935,29 @@ export async function analyzeFormationImage(
   teamType: 'home' | 'away',
   mimeType = 'image/jpeg',
   analysisImages?: AnalysisImage[],
-  teamHint?: string
+  teamHint?: string,
+  onDebug?: AnalysisDebugLogger
 ): Promise<FormationAnalysis> {
+  const debugLog: string[] = [];
+  const debug = (message: string) => {
+    const line = `${new Date().toLocaleTimeString('ja-JP', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })} ${message}`;
+    debugLog.push(line);
+    onDebug?.(line);
+  };
+
   try {
+    debug(`解析開始: ${teamType}${teamHint ? ` / ${teamHint}` : ''}`);
+    debug(`APIキー: ${getGeminiApiKey() ? 'あり' : 'なし'}`);
     assertGeminiApiKey();
     const inlineImages = prepareInlineImages(imageBase64, mimeType, analysisImages);
+    debug(`送信画像: ${inlineImages.length}枚`);
+    inlineImages.forEach((image, index) => {
+      debug(`画像${index + 1}: ${image.label} ${image.mimeType} 約${Math.round(estimateBase64Bytes(image.data) / 1024)}KB`);
+    });
     const dictionaryHint = buildDictionaryPrompt(teamHint);
 
     const prompt = `あなたはサッカーのフォーメーション画像、テレビ中継のスタメン表示、スマホのスクリーンショットを読む専門家です。
@@ -970,24 +1023,30 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
         maxOutputTokens: 900,
         temperature: 0.1,
       },
-    }, GEMINI_VISION_MODELS);
+    }, GEMINI_VISION_MODELS, debug);
 
     const content = extractResponseText(response.data);
+    debug(`主解析レスポンス文字数: ${content.length}`);
     if (!content) {
       throw new Error('No response from Gemini API');
     }
 
     const analysis = extractJsonObject(content);
     const normalizedAnalysis = normalizeFormationAnalysis(analysis, teamType);
+    debug(`主解析結果: formation=${normalizedAnalysis.formation} players=${normalizedAnalysis.players.length}`);
     if (hasUsefulFormationAnalysis(normalizedAnalysis)) {
-      return await enrichFormationWithAllOcr(
+      const enriched = await enrichFormationWithAllOcr(
         normalizedAnalysis,
         imageBase64,
         teamType,
         mimeType,
         analysisImages,
-        teamHint
+        teamHint,
+        debug
       );
+      debug(`解析完了: ${enriched.players.length}名`);
+      enriched.debugLog = debugLog;
+      return enriched;
     }
 
     const retryPrompt = `同じ画像をもう一度、OCRと配置推定を優先して解析してください。
@@ -1022,29 +1081,41 @@ JSONのみで返してください。`;
         maxOutputTokens: 900,
         temperature: 0,
       },
-    }, GEMINI_VISION_MODELS);
+    }, GEMINI_VISION_MODELS, debug);
 
     const retryContent = extractResponseText(retryResponse.data);
+    debug(`再解析レスポンス文字数: ${retryContent.length}`);
     if (!retryContent) {
-      return await enrichFormationWithAllOcr(
+      const enriched = await enrichFormationWithAllOcr(
         normalizedAnalysis,
         imageBase64,
         teamType,
         mimeType,
-        analysisImages
+        analysisImages,
+        teamHint,
+        debug
       );
+      debug(`解析完了: ${enriched.players.length}名`);
+      enriched.debugLog = debugLog;
+      return enriched;
     }
 
     const retryAnalysis = normalizeFormationAnalysis(extractJsonObject(retryContent), teamType);
-    return await enrichFormationWithAllOcr(
+    debug(`再解析結果: formation=${retryAnalysis.formation} players=${retryAnalysis.players.length}`);
+    const enriched = await enrichFormationWithAllOcr(
       retryAnalysis,
       imageBase64,
       teamType,
       mimeType,
       analysisImages,
-      teamHint
+      teamHint,
+      debug
     );
+    debug(`解析完了: ${enriched.players.length}名`);
+    enriched.debugLog = debugLog;
+    return enriched;
   } catch (error) {
+    debug(`解析エラー: ${error instanceof Error ? error.message : String(error)}`);
     console.error('Error analyzing formation image:', error);
     throw error;
   }
@@ -1056,9 +1127,11 @@ async function readPlayersFromImage(
   mimeType = 'image/jpeg',
   knownFormation = '未解析',
   analysisImages?: AnalysisImage[],
-  teamHint?: string
+  teamHint?: string,
+  debug?: AnalysisDebugLogger
 ) {
   const inlineImages = prepareInlineImages(imageBase64, mimeType, analysisImages);
+  debug?.(`選手OCR送信画像: ${inlineImages.length}枚`);
   const dictionaryHint = buildDictionaryPrompt(teamHint);
   const prompt = `あなたはサッカー画像の選手名OCR専門家です。
 この画像から、${teamType === 'home' ? 'ホーム' : 'アウェイ'}チームの選手名だけをできる限り読み取ってください。
@@ -1101,9 +1174,10 @@ JSONのみで返してください。`;
       maxOutputTokens: 700,
       temperature: 0,
     },
-  }, GEMINI_VISION_MODELS);
+  }, GEMINI_VISION_MODELS, debug);
 
   const content = extractResponseText(response.data);
+  debug?.(`選手OCRレスポンス文字数: ${content.length}`);
   if (!content) {
     return {
       teamName: teamType === 'home' ? 'ホームチーム' : 'アウェイチーム',
@@ -1113,6 +1187,7 @@ JSONのみで返してください。`;
   }
 
   const result = extractJsonObject(content);
+  debug?.(`選手OCR抽出: ${Array.isArray(result.players) ? result.players.length : 0}件`);
   return {
     teamName: ensureJapaneseText(
       result.teamName,
