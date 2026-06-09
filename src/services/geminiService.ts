@@ -24,18 +24,19 @@ export interface PredictionResult {
 }
 
 const GEMINI_MODELS = [
-  process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash',
+  process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-3.1-flash-lite',
+  'gemini-2.5-flash',
   'gemini-2.0-flash',
 ];
 const GEMINI_VISION_MODELS = [
-  process.env.EXPO_PUBLIC_GEMINI_VISION_MODEL || 'gemini-2.5-pro',
+  process.env.EXPO_PUBLIC_GEMINI_VISION_MODEL || 'gemini-3.1-flash-lite',
   process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash',
   'gemini-2.0-flash',
 ];
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const MAX_INLINE_IMAGE_BYTES = 18 * 1024 * 1024;
 const GEMINI_TIMEOUT_MS = 60000;
-const MAX_ANALYSIS_IMAGES = 8;
+const MAX_ANALYSIS_IMAGES = 1;
 type AnalysisDebugLogger = (message: string) => void;
 
 const TEAM_PLAYER_DICTIONARIES: Record<string, string[]> = {
@@ -328,6 +329,21 @@ function extractResponseText(data: any) {
     .trim();
 }
 
+function describeGeminiResponse(data: any) {
+  const candidates = data?.candidates;
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    return 'candidatesなし';
+  }
+
+  return candidates
+    .map((candidate, index) => {
+      const parts = candidate?.content?.parts;
+      const partCount = Array.isArray(parts) ? parts.length : 0;
+      return `candidate${index + 1}: finish=${candidate?.finishReason || '不明'} parts=${partCount}`;
+    })
+    .join(' / ');
+}
+
 function normalizePlayers(players: unknown): string[] {
   if (!Array.isArray(players)) {
     return [];
@@ -602,7 +618,6 @@ ${dictionaryHint}
     ],
     generationConfig: {
       responseMimeType: 'application/json',
-      responseSchema: RAW_OCR_RESPONSE_SCHEMA,
       candidateCount: 1,
       maxOutputTokens: 900,
       temperature: 0,
@@ -611,6 +626,7 @@ ${dictionaryHint}
 
   const content = extractResponseText(response.data);
   if (!content) {
+    debug?.(`生OCR本文なし: ${describeGeminiResponse(response.data)}`);
     return {
       players: [],
       confidence: 0,
@@ -756,6 +772,7 @@ async function postGeminiGenerateContent(
         }
       );
       debug?.(`Gemini応答: ${model} HTTP ${response.status}`);
+      debug?.(`Gemini候補: ${describeGeminiResponse(response.data)}`);
       return response;
     } catch (error) {
       lastError = error;
@@ -782,6 +799,7 @@ async function postGeminiGenerateContent(
               }
             );
             debug?.(`Gemini再応答: ${model} HTTP ${fallbackResponse.status}`);
+            debug?.(`Gemini再候補: ${describeGeminiResponse(fallbackResponse.data)}`);
             return fallbackResponse;
           } catch (fallbackError) {
             lastError = fallbackError;
@@ -1018,7 +1036,6 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
       ],
       generationConfig: {
         responseMimeType: 'application/json',
-        responseSchema: FORMATION_RESPONSE_SCHEMA,
         candidateCount: 1,
         maxOutputTokens: 900,
         temperature: 0.1,
@@ -1028,7 +1045,7 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
     const content = extractResponseText(response.data);
     debug(`主解析レスポンス文字数: ${content.length}`);
     if (!content) {
-      throw new Error('No response from Gemini API');
+      throw new Error(`Gemini応答本文が空です（${describeGeminiResponse(response.data)}）`);
     }
 
     const analysis = extractJsonObject(content);
@@ -1076,7 +1093,6 @@ JSONのみで返してください。`;
       ],
       generationConfig: {
         responseMimeType: 'application/json',
-        responseSchema: FORMATION_RESPONSE_SCHEMA,
         candidateCount: 1,
         maxOutputTokens: 900,
         temperature: 0,
@@ -1086,6 +1102,7 @@ JSONのみで返してください。`;
     const retryContent = extractResponseText(retryResponse.data);
     debug(`再解析レスポンス文字数: ${retryContent.length}`);
     if (!retryContent) {
+      debug(`再解析本文なし: ${describeGeminiResponse(retryResponse.data)}`);
       const enriched = await enrichFormationWithAllOcr(
         normalizedAnalysis,
         imageBase64,
@@ -1169,7 +1186,6 @@ JSONのみで返してください。`;
     ],
     generationConfig: {
       responseMimeType: 'application/json',
-      responseSchema: PLAYER_OCR_RESPONSE_SCHEMA,
       candidateCount: 1,
       maxOutputTokens: 700,
       temperature: 0,
@@ -1179,6 +1195,7 @@ JSONのみで返してください。`;
   const content = extractResponseText(response.data);
   debug?.(`選手OCRレスポンス文字数: ${content.length}`);
   if (!content) {
+    debug?.(`選手OCR本文なし: ${describeGeminiResponse(response.data)}`);
     return {
       teamName: teamType === 'home' ? 'ホームチーム' : 'アウェイチーム',
       players: [],

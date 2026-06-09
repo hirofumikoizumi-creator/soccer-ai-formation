@@ -18,7 +18,7 @@ export interface AnalysisImage {
 
 async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<PickedImage> {
   const maxDimension = Math.max(asset.width || 0, asset.height || 0);
-  const targetMaxDimension = 2800;
+  const targetMaxDimension = 1800;
   const resize =
     maxDimension > targetMaxDimension
       ? {
@@ -35,8 +35,8 @@ async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<
       resize ? [{ resize }] : [],
       {
         base64: true,
-        compress: 1,
-        format: ImageManipulator.SaveFormat.PNG,
+        compress: 0.86,
+        format: ImageManipulator.SaveFormat.JPEG,
       }
     );
 
@@ -52,7 +52,7 @@ async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<
 
     const pickedImage = {
       base64,
-      mimeType: 'image/png',
+      mimeType: 'image/jpeg',
       uri: manipulated.uri,
     };
 
@@ -83,149 +83,16 @@ async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<
 }
 
 async function createAnalysisImages(
-  asset: ImagePicker.ImagePickerAsset,
+  _asset: ImagePicker.ImagePickerAsset,
   primary: PickedImage
 ): Promise<AnalysisImage[]> {
-  const width = asset.width || 0;
-  const height = asset.height || 0;
-  if (!width || !height) {
-    return [];
-  }
-
-  const cropSpecs = [
-    {
-      label: 'web-pitch-only',
-      originX: Math.round(width * 0.08),
-      originY: Math.round(height * 0.14),
-      width: Math.round(width * 0.58),
-      height: Math.round(height * 0.76),
-      enabled: width > height * 1.25,
-    },
-    {
-      label: 'web-pitch-tight',
-      originX: Math.round(width * 0.1),
-      originY: Math.round(height * 0.2),
-      width: Math.round(width * 0.55),
-      height: Math.round(height * 0.66),
-      enabled: width > height * 1.25,
-    },
-    {
-      label: 'left-main-area',
-      originX: 0,
-      originY: 0,
-      width: Math.round(width * 0.72),
-      height,
-      enabled: width > height * 1.15,
-    },
-    {
-      label: 'left-main-tight',
-      originX: 0,
-      originY: Math.round(height * 0.06),
-      width: Math.round(width * 0.68),
-      height: Math.round(height * 0.86),
-      enabled: width > height * 1.15,
-    },
-    {
-      label: 'center-pitch-zoom',
-      originX: Math.round(width * 0.08),
-      originY: Math.round(height * 0.08),
-      width: Math.round(width * 0.84),
-      height: Math.round(height * 0.84),
-      enabled: true,
-    },
-    {
-      label: 'top-names-zoom',
-      originX: 0,
-      originY: 0,
-      width,
-      height: Math.round(height * 0.38),
-      enabled: true,
-    },
-    {
-      label: 'middle-names-zoom',
-      originX: 0,
-      originY: Math.round(height * 0.28),
-      width,
-      height: Math.round(height * 0.44),
-      enabled: true,
-    },
-    {
-      label: 'bottom-names-zoom',
-      originX: 0,
-      originY: Math.round(height * 0.62),
-      width,
-      height: Math.round(height * 0.38),
-      enabled: true,
-    },
-    {
-      label: 'upper-line-zoom',
-      originX: 0,
-      originY: 0,
-      width,
-      height: Math.round(height * 0.55),
-      enabled: height > width * 1.05,
-    },
-    {
-      label: 'lower-line-zoom',
-      originX: 0,
-      originY: Math.round(height * 0.45),
-      width,
-      height: Math.round(height * 0.55),
-      enabled: height > width * 1.05,
-    },
-  ];
-
-  const variants: AnalysisImage[] = [
+  return [
     {
       base64: primary.base64,
       mimeType: primary.mimeType,
       label: 'full-selection',
     },
   ];
-
-  for (const spec of cropSpecs) {
-    if (!spec.enabled || variants.length >= 8) {
-      continue;
-    }
-
-    try {
-      const cropped = await ImageManipulator.manipulateAsync(
-        asset.uri,
-        [
-          {
-            crop: {
-              originX: Math.max(0, spec.originX),
-              originY: Math.max(0, spec.originY),
-              width: Math.min(width - spec.originX, spec.width),
-              height: Math.min(height - spec.originY, spec.height),
-            },
-          },
-          {
-            resize: {
-              width: 3200,
-            },
-          },
-        ],
-        {
-          base64: true,
-          compress: 1,
-          format: ImageManipulator.SaveFormat.PNG,
-        }
-      );
-
-      if (cropped.base64) {
-        variants.push({
-          base64: cropped.base64,
-          mimeType: 'image/png',
-          label: spec.label,
-        });
-      }
-    } catch (error) {
-      console.warn(`Failed to create analysis image: ${spec.label}`, error);
-    }
-  }
-
-  return variants;
 }
 
 function showSettingsAlert(title: string, message: string) {
