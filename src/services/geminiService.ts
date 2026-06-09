@@ -34,7 +34,6 @@ const GEMINI_VISION_MODELS = [
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const MAX_INLINE_IMAGE_BYTES = 18 * 1024 * 1024;
 const GEMINI_TIMEOUT_MS = 60000;
-const MIN_PLAYERS_FOR_CONFIDENT_READ = 5;
 const MAX_ANALYSIS_IMAGES = 5;
 
 const FORMATION_RESPONSE_SCHEMA = {
@@ -62,6 +61,18 @@ const PLAYER_OCR_RESPONSE_SCHEMA = {
     confidence: { type: 'NUMBER' },
   },
   required: ['teamName', 'players', 'confidence'],
+};
+
+const RAW_OCR_RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    rawTextLines: {
+      type: 'ARRAY',
+      items: { type: 'STRING' },
+    },
+    confidence: { type: 'NUMBER' },
+  },
+  required: ['rawTextLines', 'confidence'],
 };
 
 function assertGeminiApiKey() {
@@ -214,6 +225,38 @@ function cleanPlayerLabel(player: string) {
   return position ? `${position}: ${name}` : name;
 }
 
+function extractPlayerCandidatesFromTextLines(lines: unknown) {
+  if (!Array.isArray(lines)) {
+    return [];
+  }
+
+  const ignored = /google|検索|http|www|archive|カテゴリー|カテゴリ|screenshot|lineup11|sports|基本|フォーメーション|監督|組織|月|年|代表|チーム|広告|スポンサー|copyright|©|tm|browser|chrome|タブ|記事|本文|順位|試合|予定/i;
+  const positionPrefix = /^(GK|CB|DF|RB|LB|RWB|LWB|SB|DMF|CMF|OMF|MF|RMF|LMF|AMF|CF|ST|FW|LWG|RWG|LW|RW)\s*[:：\-]?\s*/i;
+
+  return normalizePlayers(
+    lines
+      .flatMap((line) =>
+        String(line || '')
+          .split(/[,\n、]/)
+          .map((part) => part.trim())
+      )
+      .map((line) => line.replace(/[（(][^（）()]{1,30}[）)]/g, '').trim())
+      .filter((line) => {
+        if (!line || ignored.test(line)) {
+          return false;
+        }
+        const withoutPosition = line.replace(positionPrefix, '').trim();
+        if (!withoutPosition || /^[0-9０-９\s\-ー]+$/.test(withoutPosition)) {
+          return false;
+        }
+        if (withoutPosition.length > 24) {
+          return false;
+        }
+        return /[ァ-ヶー一-龠A-Za-z]/.test(withoutPosition);
+      })
+  );
+}
+
 function normalizeFormationLabel(formation: unknown) {
   const text = String(formation || '').trim();
   const match = text.match(/([3-5])\s*[-ー－]\s*([1-5])\s*[-ー－]\s*([1-5])(?:\s*[-ー－]\s*([1-5]))?/);
@@ -275,10 +318,6 @@ function hasUsefulFormationAnalysis(analysis: FormationAnalysis) {
   return analysis.formation !== '未解析' || analysis.players.length > 0;
 }
 
-function needsPlayerOcrRetry(analysis: FormationAnalysis) {
-  return analysis.formation === '未解析' || analysis.players.length < MIN_PLAYERS_FOR_CONFIDENT_READ;
-}
-
 function mergePlayerLists(primaryPlayers: string[], secondaryPlayers: string[]) {
   return normalizePlayers([...primaryPlayers, ...secondaryPlayers]).slice(0, 11);
 }
@@ -325,6 +364,124 @@ async function readPlayersFromIndividualImages(
     teamName: bestTeamName,
     players: mergedPlayers,
     confidence: bestConfidence,
+  };
+}
+
+async function readRawTextCandidatesFromImages(
+  imageBase64: string,
+  mimeType: string,
+  analysisImages?: AnalysisImage[]
+) {
+  const inlineImages = prepareInlineImages(imageBase64, mimeType, analysisImages);
+  const prompt = `画像内の文字をOCRしてください。
+目的はサッカーのフォーメーション画像から、少しでも読める選手名を拾うことです。
+
+ルール:
+- ピッチ上の白文字、選手名ラベル、スタメン表、LINEUP11画像内の名前を最優先でrawTextLinesに入れてください。
+- ブラウザUI、検索バー、URL、右サイドバー、記事本文、広告、アーカイブ、カテゴリ、ロゴは可能な限り除外してください。
+- 文字が一部しか読めなくても、その短い文字列をrawTextLinesに入れてください。
+- 括弧内のクラブ名は除外してください。
+- JSONのみで返してください。`;
+
+  const response = await postGeminiGenerateContent({
+    contents: [
+      {
+        parts: [
+          { text: prompt },
+          ...buildInlineImageParts(inlineImages),
+        ],
+      },
+    ],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      responseSchema: RAW_OCR_RESPONSE_SCHEMA,
+      candidateCount: 1,
+      maxOutputTokens: 900,
+      temperature: 0,
+    },
+  }, GEMINI_VISION_MODELS);
+
+  const content = extractResponseText(response.data);
+  if (!content) {
+    return {
+      players: [],
+      confidence: 0,
+    };
+  }
+
+  const result = extractJsonObject(content);
+  return {
+    players: extractPlayerCandidatesFromTextLines(result.rawTextLines),
+    confidence: typeof result.confidence === 'number' ? result.confidence : 0.4,
+  };
+}
+
+async function enrichFormationWithAllOcr(
+  analysis: FormationAnalysis,
+  imageBase64: string,
+  teamType: 'home' | 'away',
+  mimeType: string,
+  analysisImages?: AnalysisImage[]
+) {
+  let players = analysis.players;
+  let confidence = analysis.confidence;
+  let teamName = analysis.teamName;
+
+  try {
+    const playerOcr = await readPlayersFromImage(
+      imageBase64,
+      teamType,
+      mimeType,
+      analysis.formation,
+      analysisImages
+    );
+    players = mergePlayerLists(players, playerOcr.players);
+    confidence = Math.max(confidence, playerOcr.confidence);
+    if (teamName === (teamType === 'home' ? 'ホームチーム' : 'アウェイチーム')) {
+      teamName = playerOcr.teamName;
+    }
+  } catch (error) {
+    console.warn('Player OCR pass failed', error);
+  }
+
+  if (players.length < 11) {
+    try {
+      const individualOcr = await readPlayersFromIndividualImages(
+        imageBase64,
+        teamType,
+        mimeType,
+        analysis.formation,
+        analysisImages
+      );
+      players = mergePlayerLists(players, individualOcr.players);
+      confidence = Math.max(confidence, individualOcr.confidence);
+      if (teamName === (teamType === 'home' ? 'ホームチーム' : 'アウェイチーム')) {
+        teamName = individualOcr.teamName;
+      }
+    } catch (error) {
+      console.warn('Individual OCR pass failed', error);
+    }
+  }
+
+  if (players.length < 11) {
+    try {
+      const rawOcr = await readRawTextCandidatesFromImages(imageBase64, mimeType, analysisImages);
+      players = mergePlayerLists(players, rawOcr.players);
+      confidence = Math.max(confidence, rawOcr.confidence);
+    } catch (error) {
+      console.warn('Raw OCR pass failed', error);
+    }
+  }
+
+  const inferredFormation =
+    analysis.formation === '未解析' ? inferFormationFromPlayers(players) : '';
+
+  return {
+    ...analysis,
+    teamName,
+    formation: inferredFormation || analysis.formation,
+    players,
+    confidence,
   };
 }
 
@@ -607,47 +764,13 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
     const analysis = extractJsonObject(content);
     const normalizedAnalysis = normalizeFormationAnalysis(analysis, teamType);
     if (hasUsefulFormationAnalysis(normalizedAnalysis)) {
-      if (needsPlayerOcrRetry(normalizedAnalysis)) {
-        try {
-          const playerOcr = await readPlayersFromImage(
-            imageBase64,
-            teamType,
-            mimeType,
-            normalizedAnalysis.formation,
-            analysisImages
-          );
-          let mergedPlayers = mergePlayerLists(normalizedAnalysis.players, playerOcr.players);
-
-          if (mergedPlayers.length < MIN_PLAYERS_FOR_CONFIDENT_READ) {
-            const individualOcr = await readPlayersFromIndividualImages(
-              imageBase64,
-              teamType,
-              mimeType,
-              normalizedAnalysis.formation,
-              analysisImages
-            );
-            mergedPlayers = mergePlayerLists(mergedPlayers, individualOcr.players);
-            playerOcr.players = mergePlayerLists(playerOcr.players, individualOcr.players);
-            playerOcr.confidence = Math.max(playerOcr.confidence, individualOcr.confidence);
-          }
-
-          if (mergedPlayers.length > normalizedAnalysis.players.length) {
-            return {
-              ...normalizedAnalysis,
-              teamName:
-                normalizedAnalysis.teamName === (teamType === 'home' ? 'ホームチーム' : 'アウェイチーム')
-                  ? playerOcr.teamName
-                  : normalizedAnalysis.teamName,
-              players: mergedPlayers,
-              confidence: Math.max(normalizedAnalysis.confidence, playerOcr.confidence),
-            };
-          }
-        } catch (playerOcrError) {
-          console.warn('Player OCR retry failed', playerOcrError);
-        }
-      }
-
-      return normalizedAnalysis;
+      return await enrichFormationWithAllOcr(
+        normalizedAnalysis,
+        imageBase64,
+        teamType,
+        mimeType,
+        analysisImages
+      );
     }
 
     const retryPrompt = `同じ画像をもう一度、OCRと配置推定を優先して解析してください。
@@ -685,45 +808,23 @@ JSONのみで返してください。`;
 
     const retryContent = extractResponseText(retryResponse.data);
     if (!retryContent) {
-      return normalizedAnalysis;
+      return await enrichFormationWithAllOcr(
+        normalizedAnalysis,
+        imageBase64,
+        teamType,
+        mimeType,
+        analysisImages
+      );
     }
 
     const retryAnalysis = normalizeFormationAnalysis(extractJsonObject(retryContent), teamType);
-    if (needsPlayerOcrRetry(retryAnalysis)) {
-      try {
-        const playerOcr = await readPlayersFromImage(
-          imageBase64,
-          teamType,
-          mimeType,
-          retryAnalysis.formation,
-          analysisImages
-        );
-        if (playerOcr.players.length < MIN_PLAYERS_FOR_CONFIDENT_READ) {
-          const individualOcr = await readPlayersFromIndividualImages(
-            imageBase64,
-            teamType,
-            mimeType,
-            retryAnalysis.formation,
-            analysisImages
-          );
-          playerOcr.players = mergePlayerLists(playerOcr.players, individualOcr.players);
-          playerOcr.confidence = Math.max(playerOcr.confidence, individualOcr.confidence);
-        }
-        return {
-          ...retryAnalysis,
-          teamName:
-            retryAnalysis.teamName === (teamType === 'home' ? 'ホームチーム' : 'アウェイチーム')
-              ? playerOcr.teamName
-              : retryAnalysis.teamName,
-          players: mergePlayerLists(retryAnalysis.players, playerOcr.players),
-          confidence: Math.max(retryAnalysis.confidence, playerOcr.confidence),
-        };
-      } catch (playerOcrError) {
-        console.warn('Player OCR retry failed', playerOcrError);
-      }
-    }
-
-    return retryAnalysis;
+    return await enrichFormationWithAllOcr(
+      retryAnalysis,
+      imageBase64,
+      teamType,
+      mimeType,
+      analysisImages
+    );
   } catch (error) {
     console.error('Error analyzing formation image:', error);
     throw error;
