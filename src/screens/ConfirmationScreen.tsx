@@ -79,6 +79,23 @@ function createPlayerFields(players: string[]) {
   return fields;
 }
 
+function createCandidatePlayers(players: string[]) {
+  const seen = new Set<string>();
+  return players
+    .map(stripPositionPrefix)
+    .filter((player) => {
+      if (!player) {
+        return false;
+      }
+      const key = player.toLowerCase();
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+}
+
 function getAnalysisErrorMessage(error: unknown) {
   if (error instanceof Error && error.message) {
     return error.message;
@@ -126,6 +143,7 @@ export default function ConfirmationScreen({
   ) => {
     try {
       const previousImageUri = teamType === 'home' ? homeImageUri : awayImageUri;
+      const teamHint = teamType === 'home' ? homeFormation.teamHint : awayFormation.teamHint;
       setReanalyzing(teamType);
       const image = source === 'library' ? await pickImage() : await takePhoto();
       if (!image) {
@@ -163,7 +181,8 @@ export default function ConfirmationScreen({
         image.base64,
         teamType,
         image.mimeType,
-        image.analysisImages
+        image.analysisImages,
+        teamHint
       );
       if (teamType === 'home') {
         setHomeTeam(analysis.teamName);
@@ -190,6 +209,22 @@ export default function ConfirmationScreen({
     const players = teamType === 'home' ? homePlayers : awayPlayers;
     const nextPlayers = [...players];
     nextPlayers[index] = value;
+    setter(nextPlayers);
+  };
+
+  const insertCandidatePlayer = (teamType: 'home' | 'away', player: string) => {
+    const setter = teamType === 'home' ? setHomePlayers : setAwayPlayers;
+    const players = teamType === 'home' ? homePlayers : awayPlayers;
+    const nextPlayers = [...players];
+    const existingIndex = nextPlayers.findIndex(
+      (value) => value.trim().toLowerCase() === player.trim().toLowerCase()
+    );
+    if (existingIndex >= 0) {
+      return;
+    }
+
+    const emptyIndex = nextPlayers.findIndex((value) => !value.trim());
+    nextPlayers[emptyIndex >= 0 ? emptyIndex : nextPlayers.length - 1] = player;
     setter(nextPlayers);
   };
 
@@ -256,6 +291,9 @@ export default function ConfirmationScreen({
     const imageUri = isHome ? homeImageUri : awayImageUri;
     const isAnalyzing = reanalyzing === teamType;
     const positionLabels = getPositionLabels(formation);
+    const candidatePlayers = createCandidatePlayers(
+      isHome ? homeFormation.players : awayFormation.players
+    );
 
     return (
       <View style={styles.section}>
@@ -321,6 +359,22 @@ export default function ConfirmationScreen({
             <Text style={styles.helpText}>
               選択中の{formation}に合わせて、各欄に想定ポジションを表示しています。
             </Text>
+            {candidatePlayers.length > 0 && (
+              <View style={styles.candidatePanel}>
+                <Text style={styles.candidateTitle}>読めた候補</Text>
+                <View style={styles.candidateWrap}>
+                  {candidatePlayers.map((player) => (
+                    <TouchableOpacity
+                      key={`${teamType}-${player}`}
+                      style={styles.candidateChip}
+                      onPress={() => insertCandidatePlayer(teamType, player)}
+                    >
+                      <Text style={styles.candidateChipText}>{player}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
             <View style={styles.playersGrid}>
               {players.map((player, index) => (
                 <View key={index} style={styles.playerInputRow}>
@@ -631,6 +685,38 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     marginBottom: 10,
+  },
+  candidatePanel: {
+    marginBottom: 12,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(5, 17, 39, 0.68)',
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+  },
+  candidateTitle: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  candidateWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  candidateChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(9, 24, 52, 0.9)',
+    borderWidth: 1,
+    borderColor: colors.gold,
+  },
+  candidateChipText: {
+    color: colors.goldBright,
+    fontSize: 12,
+    fontWeight: '800',
   },
   input: {
     backgroundColor: 'rgba(5, 17, 39, 0.72)',

@@ -14,6 +14,15 @@ import { analyzeFormationImage } from '../services/geminiService';
 import type { FormationData } from '../types';
 import { colors, shadows } from '../theme';
 
+const TEAM_HINT_OPTIONS = [
+  '指定なし',
+  '日本代表',
+  'オランダ代表',
+  'フランス代表',
+  'イングランド代表',
+  'スペイン代表',
+];
+
 interface HomeScreenProps {
   onProceed: (homeFormation: FormationData, awayFormation: FormationData) => void;
   remainingAnalyses: number;
@@ -28,23 +37,26 @@ function createPendingFormation(
   teamType: 'home' | 'away',
   imageUri: string,
   imageBase64?: string,
-  mimeType?: string
+  mimeType?: string,
+  teamHint?: string
 ): FormationData {
   return {
-    teamName: teamType === 'home' ? 'ホームチーム' : 'アウェイチーム',
+    teamName: teamHint || (teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'),
     formation: '未解析',
     players: [],
     imageUri,
     imageBase64,
     mimeType,
+    teamHint,
   };
 }
 
-function createManualFormation(teamType: 'home' | 'away'): FormationData {
+function createManualFormation(teamType: 'home' | 'away', teamHint?: string): FormationData {
   return {
-    teamName: teamType === 'home' ? 'ホームチーム' : 'アウェイチーム',
+    teamName: teamHint || (teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'),
     formation: '4-2-3-1',
     players: [],
+    teamHint,
   };
 }
 
@@ -73,9 +85,17 @@ export default function HomeScreen({
   const [awayFormation, setAwayFormation] = useState<FormationData | null>(null);
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState<'home' | 'away' | null>(null);
+  const [homeTeamHint, setHomeTeamHint] = useState('指定なし');
+  const [awayTeamHint, setAwayTeamHint] = useState('指定なし');
+
+  const getTeamHint = (teamType: 'home' | 'away') => {
+    const value = teamType === 'home' ? homeTeamHint : awayTeamHint;
+    return value === '指定なし' ? undefined : value;
+  };
 
   const handleSelectImage = async (teamType: 'home' | 'away') => {
     try {
+      const teamHint = getTeamHint(teamType);
       const image = await pickImage();
       if (!image) {
         Alert.alert('写真を選択できません', '写真ライブラリへのアクセスを許可してからもう一度お試しください');
@@ -87,7 +107,8 @@ export default function HomeScreen({
         teamType,
         image.uri,
         image.base64,
-        image.mimeType
+        image.mimeType,
+        teamHint
       );
       pendingFormation.analysisImages = image.analysisImages;
       if (teamType === 'home') {
@@ -100,7 +121,8 @@ export default function HomeScreen({
         image.base64,
         teamType,
         image.mimeType,
-        image.analysisImages
+        image.analysisImages,
+        teamHint
       );
 
       const formationData: FormationData = {
@@ -111,6 +133,7 @@ export default function HomeScreen({
         imageBase64: image.base64,
         mimeType: image.mimeType,
         analysisImages: image.analysisImages,
+        teamHint,
       };
 
       if (teamType === 'home') {
@@ -131,6 +154,7 @@ export default function HomeScreen({
 
   const handleTakePhoto = async (teamType: 'home' | 'away') => {
     try {
+      const teamHint = getTeamHint(teamType);
       const image = await takePhoto();
       if (!image) {
         Alert.alert('カメラを起動できません', 'カメラへのアクセスを許可してからもう一度お試しください');
@@ -142,7 +166,8 @@ export default function HomeScreen({
         teamType,
         image.uri,
         image.base64,
-        image.mimeType
+        image.mimeType,
+        teamHint
       );
       pendingFormation.analysisImages = image.analysisImages;
       if (teamType === 'home') {
@@ -155,7 +180,8 @@ export default function HomeScreen({
         image.base64,
         teamType,
         image.mimeType,
-        image.analysisImages
+        image.analysisImages,
+        teamHint
       );
 
       const formationData: FormationData = {
@@ -166,6 +192,7 @@ export default function HomeScreen({
         imageBase64: image.base64,
         mimeType: image.mimeType,
         analysisImages: image.analysisImages,
+        teamHint,
       };
 
       if (teamType === 'home') {
@@ -193,7 +220,7 @@ export default function HomeScreen({
   };
 
   const handleManualInput = (teamType: 'home' | 'away') => {
-    const manualFormation = createManualFormation(teamType);
+    const manualFormation = createManualFormation(teamType, getTeamHint(teamType));
     if (teamType === 'home') {
       setHomeFormation(manualFormation);
     } else {
@@ -224,11 +251,13 @@ export default function HomeScreen({
         throw new Error('画像データを再分析できませんでした。写真をもう一度選択してください');
       }
 
+      const activeTeamHint = getTeamHint(teamType) || formation.teamHint;
       const analysis = await analyzeFormationImage(
         formation.imageBase64,
         teamType,
         formation.mimeType || 'image/jpeg',
-        formation.analysisImages
+        formation.analysisImages,
+        activeTeamHint
       );
       const formationData: FormationData = {
         teamName: analysis.teamName,
@@ -238,6 +267,7 @@ export default function HomeScreen({
         imageBase64: formation.imageBase64,
         mimeType: formation.mimeType || 'image/jpeg',
         analysisImages: formation.analysisImages,
+        teamHint: activeTeamHint,
       };
 
       if (teamType === 'home') {
@@ -365,6 +395,33 @@ export default function HomeScreen({
     );
   };
 
+  const renderTeamHintSelector = (teamType: 'home' | 'away') => {
+    const selected = teamType === 'home' ? homeTeamHint : awayTeamHint;
+    const setSelected = teamType === 'home' ? setHomeTeamHint : setAwayTeamHint;
+
+    return (
+      <View style={styles.teamHintPanel}>
+        <Text style={styles.teamHintLabel}>読み取り補正</Text>
+        <View style={styles.teamHintOptions}>
+          {TEAM_HINT_OPTIONS.map((option) => {
+            const active = selected === option;
+            return (
+              <TouchableOpacity
+                key={`${teamType}-${option}`}
+                style={[styles.teamHintChip, active && styles.teamHintChipActive]}
+                onPress={() => setSelected(option)}
+              >
+                <Text style={[styles.teamHintChipText, active && styles.teamHintChipTextActive]}>
+                  {option}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.backgroundAccent} />
@@ -405,11 +462,13 @@ export default function HomeScreen({
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>ホームチーム</Text>
+        {renderTeamHintSelector('home')}
         {homeFormation ? renderTeamCard('home', homeFormation) : renderUploadButtons('home')}
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>アウェイチーム</Text>
+        {renderTeamHintSelector('away')}
         {awayFormation ? renderTeamCard('away', awayFormation) : renderUploadButtons('away')}
       </View>
 
@@ -519,6 +578,45 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.goldBright,
     marginBottom: 12,
+  },
+  teamHintPanel: {
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(5, 17, 39, 0.64)',
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+  },
+  teamHintLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  teamHintOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  teamHintChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.borderSoft,
+    backgroundColor: 'rgba(9, 24, 52, 0.86)',
+  },
+  teamHintChipActive: {
+    backgroundColor: colors.gold,
+    borderColor: colors.goldBright,
+  },
+  teamHintChipText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  teamHintChipTextActive: {
+    color: colors.background,
   },
   formationCard: {
     backgroundColor: colors.panelSoft,

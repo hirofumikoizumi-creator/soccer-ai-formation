@@ -11,7 +11,7 @@
     ],
     "ios": {
       "bundleIdentifier": "com.gsw.socceraiyosou",
-      "buildNumber": "41",
+      "buildNumber": "42",
       "infoPlist": {
         "CFBundleDisplayName": "AI予想",
         "ITSAppUsesNonExemptEncryption": false,

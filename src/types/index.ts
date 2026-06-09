@@ -6,6 +6,7 @@ export interface FormationData {
   imageBase64?: string;
   mimeType?: string;
   analysisImages?: AnalysisImage[];
+  teamHint?: string;
 }
 
 export interface AnalysisImage {

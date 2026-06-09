@@ -36,6 +36,85 @@ const MAX_INLINE_IMAGE_BYTES = 18 * 1024 * 1024;
 const GEMINI_TIMEOUT_MS = 60000;
 const MAX_ANALYSIS_IMAGES = 5;
 
+const TEAM_PLAYER_DICTIONARIES: Record<string, string[]> = {
+  'オランダ代表': [
+    'フェルブルッヘン',
+    'ファン・ダイク',
+    'デフライ',
+    'ダンフリース',
+    'アケ',
+    'ラインデルス',
+    'スハウテン',
+    'フェールマン',
+    'デパイ',
+    'ガクポ',
+    'シャビ・シモンズ',
+    'フリンポン',
+    'マレン',
+    'ベグホルスト',
+    'ブロビー',
+  ],
+  '日本代表': [
+    '鈴木彩艶',
+    '谷口彰悟',
+    '板倉滉',
+    '町田浩樹',
+    '冨安健洋',
+    '遠藤航',
+    '守田英正',
+    '田中碧',
+    '久保建英',
+    '堂安律',
+    '三笘薫',
+    '南野拓実',
+    '伊東純也',
+    '上田綺世',
+    '前田大然',
+  ],
+  'フランス代表': [
+    'メニャン',
+    'クンデ',
+    'サリバ',
+    'ウパメカノ',
+    'テオ・エルナンデス',
+    'カンテ',
+    'チュアメニ',
+    'ラビオ',
+    'グリーズマン',
+    'エムバペ',
+    'デンベレ',
+    'ジルー',
+  ],
+  'イングランド代表': [
+    'ピックフォード',
+    'ウォーカー',
+    'ストーンズ',
+    'マグワイア',
+    'ショー',
+    'ライス',
+    'ベリンガム',
+    'フォーデン',
+    'サカ',
+    'ケイン',
+    'パーマー',
+  ],
+  'スペイン代表': [
+    'ウナイ・シモン',
+    'カルバハル',
+    'ラポルト',
+    'ル・ノルマン',
+    'ククレジャ',
+    'ロドリ',
+    'ペドリ',
+    'ファビアン',
+    'ヤマル',
+    'モラタ',
+    'ニコ・ウィリアムズ',
+  ],
+};
+
+const ALL_KNOWN_PLAYERS = Array.from(new Set(Object.values(TEAM_PLAYER_DICTIONARIES).flat()));
+
 const FORMATION_RESPONSE_SCHEMA = {
   type: 'OBJECT',
   properties: {
@@ -155,6 +234,23 @@ function buildInlineImageParts(images: ReturnType<typeof prepareInlineImages>) {
   ]);
 }
 
+function buildDictionaryPrompt(teamHint?: string) {
+  if (!teamHint) {
+    return '';
+  }
+
+  const players = TEAM_PLAYER_DICTIONARIES[teamHint];
+  if (!players || players.length === 0) {
+    return `\n対象チーム候補: ${teamHint}\n`;
+  }
+
+  return `\n対象チーム候補: ${teamHint}
+選手名候補辞書:
+${players.map((player, index) => `${index + 1}. ${player}`).join('\n')}
+OCRで一部だけ読めた名前は、この候補辞書と照合して最も近い選手名に補正してください。ただし画像内に存在しない候補を無理に追加しないでください。
+`;
+}
+
 function extractJsonObject(text: string) {
   const cleaned = text
     .replace(/```json/gi, '```')
@@ -212,17 +308,73 @@ function normalizePlayers(players: unknown): string[] {
 function cleanPlayerLabel(player: string) {
   const match = player.match(/^([A-Z]{1,4})\s*[:：]\s*(.+)$/i);
   const position = match?.[1]?.toUpperCase();
-  const name = (match?.[2] || player)
+  const rawName = (match?.[2] || player)
     .replace(/[（(][^（）()]{1,24}[）)]/g, '')
     .replace(/[「」『』"'“”]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+  const name = normalizeKnownPlayerName(rawName);
 
   if (!name || /^[0-9０-９]+$/.test(name)) {
     return '';
   }
 
   return position ? `${position}: ${name}` : name;
+}
+
+function compactForMatch(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[・\s　.\-ー－]/g, '')
+    .replace(/[ァ-ン]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0x60));
+}
+
+function levenshteinDistance(a: string, b: string) {
+  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j += 1) {
+    dp[0][j] = j;
+  }
+  for (let i = 1; i <= a.length; i += 1) {
+    for (let j = 1; j <= b.length; j += 1) {
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+function normalizeKnownPlayerName(name: string) {
+  const cleaned = name.trim();
+  const compactName = compactForMatch(cleaned);
+  if (compactName.length < 2) {
+    return cleaned;
+  }
+
+  let bestName = cleaned;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  ALL_KNOWN_PLAYERS.forEach((knownName) => {
+    const compactKnown = compactForMatch(knownName);
+    if (!compactKnown) {
+      return;
+    }
+    if (compactKnown.includes(compactName) || compactName.includes(compactKnown)) {
+      bestName = knownName;
+      bestScore = 0;
+      return;
+    }
+    const distance = levenshteinDistance(compactName, compactKnown);
+    const threshold = compactKnown.length <= 5 ? 1 : 2;
+    if (distance <= threshold && distance < bestScore) {
+      bestName = knownName;
+      bestScore = distance;
+    }
+  });
+
+  return bestName;
 }
 
 function extractPlayerCandidatesFromTextLines(lines: unknown) {
@@ -327,7 +479,8 @@ async function readPlayersFromIndividualImages(
   teamType: 'home' | 'away',
   mimeType: string,
   knownFormation: string,
-  analysisImages?: AnalysisImage[]
+  analysisImages?: AnalysisImage[],
+  teamHint?: string
 ) {
   const sourceImages =
     analysisImages && analysisImages.length > 0
@@ -345,7 +498,8 @@ async function readPlayersFromIndividualImages(
         teamType,
         mimeType,
         knownFormation,
-        [image]
+        [image],
+        teamHint
       );
       mergedPlayers = mergePlayerLists(mergedPlayers, result.players);
       if (result.confidence > bestConfidence) {
@@ -370,11 +524,14 @@ async function readPlayersFromIndividualImages(
 async function readRawTextCandidatesFromImages(
   imageBase64: string,
   mimeType: string,
-  analysisImages?: AnalysisImage[]
+  analysisImages?: AnalysisImage[],
+  teamHint?: string
 ) {
   const inlineImages = prepareInlineImages(imageBase64, mimeType, analysisImages);
+  const dictionaryHint = buildDictionaryPrompt(teamHint);
   const prompt = `画像内の文字をOCRしてください。
 目的はサッカーのフォーメーション画像から、少しでも読める選手名を拾うことです。
+${dictionaryHint}
 
 ルール:
 - ピッチ上の白文字、選手名ラベル、スタメン表、LINEUP11画像内の名前を最優先でrawTextLinesに入れてください。
@@ -421,7 +578,8 @@ async function enrichFormationWithAllOcr(
   imageBase64: string,
   teamType: 'home' | 'away',
   mimeType: string,
-  analysisImages?: AnalysisImage[]
+  analysisImages?: AnalysisImage[],
+  teamHint?: string
 ) {
   let players = analysis.players;
   let confidence = analysis.confidence;
@@ -433,7 +591,8 @@ async function enrichFormationWithAllOcr(
       teamType,
       mimeType,
       analysis.formation,
-      analysisImages
+      analysisImages,
+      teamHint
     );
     players = mergePlayerLists(players, playerOcr.players);
     confidence = Math.max(confidence, playerOcr.confidence);
@@ -451,7 +610,8 @@ async function enrichFormationWithAllOcr(
         teamType,
         mimeType,
         analysis.formation,
-        analysisImages
+        analysisImages,
+        teamHint
       );
       players = mergePlayerLists(players, individualOcr.players);
       confidence = Math.max(confidence, individualOcr.confidence);
@@ -465,7 +625,12 @@ async function enrichFormationWithAllOcr(
 
   if (players.length < 11) {
     try {
-      const rawOcr = await readRawTextCandidatesFromImages(imageBase64, mimeType, analysisImages);
+      const rawOcr = await readRawTextCandidatesFromImages(
+        imageBase64,
+        mimeType,
+        analysisImages,
+        teamHint
+      );
       players = mergePlayerLists(players, rawOcr.players);
       confidence = Math.max(confidence, rawOcr.confidence);
     } catch (error) {
@@ -686,15 +851,18 @@ export async function analyzeFormationImage(
   imageBase64: string,
   teamType: 'home' | 'away',
   mimeType = 'image/jpeg',
-  analysisImages?: AnalysisImage[]
+  analysisImages?: AnalysisImage[],
+  teamHint?: string
 ): Promise<FormationAnalysis> {
   try {
     assertGeminiApiKey();
     const inlineImages = prepareInlineImages(imageBase64, mimeType, analysisImages);
+    const dictionaryHint = buildDictionaryPrompt(teamHint);
 
     const prompt = `あなたはサッカーのフォーメーション画像、テレビ中継のスタメン表示、スマホのスクリーンショットを読む専門家です。
 アップロードされた${teamType === 'home' ? 'ホーム' : 'アウェイ'}チームの画像を解析してください。
 画像はスマートフォンのカメラ写真、テレビ画面の撮影、WebページやSNSのスクリーンショット、縦長・横長、斜め撮影、影、反射、ぼけ、低解像度を含む可能性があります。
+${dictionaryHint}
 
 最重要タスク:
 - この画像から、対象チームのフォーメーションと先発11名の選手名を読み込んでください。
@@ -769,12 +937,14 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
         imageBase64,
         teamType,
         mimeType,
-        analysisImages
+        analysisImages,
+        teamHint
       );
     }
 
     const retryPrompt = `同じ画像をもう一度、OCRと配置推定を優先して解析してください。
 前回はフォーメーションや選手名が十分に読み取れませんでした。
+${dictionaryHint}
 
 重要:
 - 画像の中のフォーメーション図、スタメン表、ピッチ上の選手名ラベルだけに集中してください。
@@ -823,7 +993,8 @@ JSONのみで返してください。`;
       imageBase64,
       teamType,
       mimeType,
-      analysisImages
+      analysisImages,
+      teamHint
     );
   } catch (error) {
     console.error('Error analyzing formation image:', error);
@@ -836,13 +1007,16 @@ async function readPlayersFromImage(
   teamType: 'home' | 'away',
   mimeType = 'image/jpeg',
   knownFormation = '未解析',
-  analysisImages?: AnalysisImage[]
+  analysisImages?: AnalysisImage[],
+  teamHint?: string
 ) {
   const inlineImages = prepareInlineImages(imageBase64, mimeType, analysisImages);
+  const dictionaryHint = buildDictionaryPrompt(teamHint);
   const prompt = `あなたはサッカー画像の選手名OCR専門家です。
 この画像から、${teamType === 'home' ? 'ホーム' : 'アウェイ'}チームの選手名だけをできる限り読み取ってください。
 フォーメーション推定よりも、選手名ラベル・スタメン表・ピッチ上の小さな文字の読み取りを最優先してください。
 この画像から対象チームの先発11名の選手名を読み込んでください。
+${dictionaryHint}
 
 前提:
 - 既知のフォーメーション候補: ${knownFormation}
