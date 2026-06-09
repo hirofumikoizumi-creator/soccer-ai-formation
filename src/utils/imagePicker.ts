@@ -94,6 +94,14 @@ async function createAnalysisImages(
 
   const cropSpecs = [
     {
+      label: 'web-pitch-only',
+      originX: Math.round(width * 0.08),
+      originY: Math.round(height * 0.14),
+      width: Math.round(width * 0.58),
+      height: Math.round(height * 0.76),
+      enabled: width > height * 1.25,
+    },
+    {
       label: 'left-main-area',
       originX: 0,
       originY: 0,
@@ -136,7 +144,7 @@ async function createAnalysisImages(
   ];
 
   for (const spec of cropSpecs) {
-    if (!spec.enabled || variants.length >= 4) {
+    if (!spec.enabled || variants.length >= 5) {
       continue;
     }
 

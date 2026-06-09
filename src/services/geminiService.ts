@@ -35,7 +35,7 @@ const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/mo
 const MAX_INLINE_IMAGE_BYTES = 18 * 1024 * 1024;
 const GEMINI_TIMEOUT_MS = 60000;
 const MIN_PLAYERS_FOR_CONFIDENT_READ = 5;
-const MAX_ANALYSIS_IMAGES = 4;
+const MAX_ANALYSIS_IMAGES = 5;
 
 const FORMATION_RESPONSE_SCHEMA = {
   type: 'OBJECT',
@@ -281,6 +281,51 @@ function needsPlayerOcrRetry(analysis: FormationAnalysis) {
 
 function mergePlayerLists(primaryPlayers: string[], secondaryPlayers: string[]) {
   return normalizePlayers([...primaryPlayers, ...secondaryPlayers]).slice(0, 11);
+}
+
+async function readPlayersFromIndividualImages(
+  imageBase64: string,
+  teamType: 'home' | 'away',
+  mimeType: string,
+  knownFormation: string,
+  analysisImages?: AnalysisImage[]
+) {
+  const sourceImages =
+    analysisImages && analysisImages.length > 0
+      ? analysisImages.filter((image) => image.label !== 'full-selection')
+      : [];
+
+  let mergedPlayers: string[] = [];
+  let bestTeamName = teamType === 'home' ? 'ホームチーム' : 'アウェイチーム';
+  let bestConfidence = 0;
+
+  for (const image of sourceImages.slice(0, 4)) {
+    try {
+      const result = await readPlayersFromImage(
+        imageBase64,
+        teamType,
+        mimeType,
+        knownFormation,
+        [image]
+      );
+      mergedPlayers = mergePlayerLists(mergedPlayers, result.players);
+      if (result.confidence > bestConfidence) {
+        bestTeamName = result.teamName;
+        bestConfidence = result.confidence;
+      }
+      if (mergedPlayers.length >= 10) {
+        break;
+      }
+    } catch (error) {
+      console.warn(`Individual OCR failed for ${image.label}`, error);
+    }
+  }
+
+  return {
+    teamName: bestTeamName,
+    players: mergedPlayers,
+    confidence: bestConfidence,
+  };
 }
 
 function removeResponseSchema(payload: any) {
@@ -571,7 +616,20 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
             normalizedAnalysis.formation,
             analysisImages
           );
-          const mergedPlayers = mergePlayerLists(normalizedAnalysis.players, playerOcr.players);
+          let mergedPlayers = mergePlayerLists(normalizedAnalysis.players, playerOcr.players);
+
+          if (mergedPlayers.length < MIN_PLAYERS_FOR_CONFIDENT_READ) {
+            const individualOcr = await readPlayersFromIndividualImages(
+              imageBase64,
+              teamType,
+              mimeType,
+              normalizedAnalysis.formation,
+              analysisImages
+            );
+            mergedPlayers = mergePlayerLists(mergedPlayers, individualOcr.players);
+            playerOcr.players = mergePlayerLists(playerOcr.players, individualOcr.players);
+            playerOcr.confidence = Math.max(playerOcr.confidence, individualOcr.confidence);
+          }
 
           if (mergedPlayers.length > normalizedAnalysis.players.length) {
             return {
@@ -640,6 +698,17 @@ JSONのみで返してください。`;
           retryAnalysis.formation,
           analysisImages
         );
+        if (playerOcr.players.length < MIN_PLAYERS_FOR_CONFIDENT_READ) {
+          const individualOcr = await readPlayersFromIndividualImages(
+            imageBase64,
+            teamType,
+            mimeType,
+            retryAnalysis.formation,
+            analysisImages
+          );
+          playerOcr.players = mergePlayerLists(playerOcr.players, individualOcr.players);
+          playerOcr.confidence = Math.max(playerOcr.confidence, individualOcr.confidence);
+        }
         return {
           ...retryAnalysis,
           teamName:
