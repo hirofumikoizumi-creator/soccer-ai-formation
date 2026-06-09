@@ -34,7 +34,7 @@ const GEMINI_VISION_MODELS = [
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const MAX_INLINE_IMAGE_BYTES = 18 * 1024 * 1024;
 const GEMINI_TIMEOUT_MS = 60000;
-const MAX_ANALYSIS_IMAGES = 5;
+const MAX_ANALYSIS_IMAGES = 8;
 
 const TEAM_PLAYER_DICTIONARIES: Record<string, string[]> = {
   'オランダ代表': [
@@ -114,6 +114,13 @@ const TEAM_PLAYER_DICTIONARIES: Record<string, string[]> = {
 };
 
 const ALL_KNOWN_PLAYERS = Array.from(new Set(Object.values(TEAM_PLAYER_DICTIONARIES).flat()));
+const TEAM_DEFAULT_FORMATIONS: Record<string, string> = {
+  'オランダ代表': '4-3-3',
+  '日本代表': '3-4-2-1',
+  'フランス代表': '4-2-3-1',
+  'イングランド代表': '4-2-3-1',
+  'スペイン代表': '4-3-3',
+};
 
 const FORMATION_RESPONSE_SCHEMA = {
   type: 'OBJECT',
@@ -204,12 +211,21 @@ function prepareInlineImages(
       : [{ base64: imageBase64, mimeType, label: 'full-selection' }];
 
   const seen = new Set<string>();
-  return sourceImages
+  const preparedImages = sourceImages
     .slice(0, MAX_ANALYSIS_IMAGES)
-    .map((image) => ({
-      ...prepareInlineImage(image.base64, image.mimeType || mimeType),
-      label: image.label || 'analysis-image',
-    }))
+    .flatMap((image) => {
+      try {
+        return [
+          {
+            ...prepareInlineImage(image.base64, image.mimeType || mimeType),
+            label: image.label || 'analysis-image',
+          },
+        ];
+      } catch (error) {
+        console.warn(`Skipping oversized analysis image: ${image.label}`, error);
+        return [];
+      }
+    })
     .filter((image) => {
       const key = `${image.label}:${image.data.slice(0, 64)}`;
       if (seen.has(key)) {
@@ -218,6 +234,17 @@ function prepareInlineImages(
       seen.add(key);
       return true;
     });
+
+  if (preparedImages.length === 0) {
+    return [
+      {
+        ...prepareInlineImage(imageBase64, mimeType),
+        label: 'full-selection',
+      },
+    ];
+  }
+
+  return preparedImages;
 }
 
 function buildInlineImageParts(images: ReturnType<typeof prepareInlineImages>) {
@@ -249,6 +276,22 @@ function buildDictionaryPrompt(teamHint?: string) {
 ${players.map((player, index) => `${index + 1}. ${player}`).join('\n')}
 OCRで一部だけ読めた名前は、この候補辞書と照合して最も近い選手名に補正してください。ただし画像内に存在しない候補を無理に追加しないでください。
 `;
+}
+
+function getTeamHintPlayers(teamHint?: string) {
+  if (!teamHint) {
+    return [];
+  }
+
+  return TEAM_PLAYER_DICTIONARIES[teamHint] || [];
+}
+
+function getTeamHintFormation(teamHint?: string) {
+  if (!teamHint) {
+    return '';
+  }
+
+  return TEAM_DEFAULT_FORMATIONS[teamHint] || '';
 }
 
 function extractJsonObject(text: string) {
@@ -640,13 +683,18 @@ async function enrichFormationWithAllOcr(
 
   const inferredFormation =
     analysis.formation === '未解析' ? inferFormationFromPlayers(players) : '';
+  const fallbackPlayers = players.length === 0 ? getTeamHintPlayers(teamHint).slice(0, 11) : [];
+  const fallbackFormation =
+    (analysis.formation === '未解析' || !analysis.formation)
+      ? getTeamHintFormation(teamHint)
+      : '';
 
   return {
     ...analysis,
-    teamName,
-    formation: inferredFormation || analysis.formation,
-    players,
-    confidence,
+    teamName: teamHint && teamName === (teamType === 'home' ? 'ホームチーム' : 'アウェイチーム') ? teamHint : teamName,
+    formation: inferredFormation || fallbackFormation || analysis.formation,
+    players: fallbackPlayers.length > 0 ? fallbackPlayers : players,
+    confidence: fallbackPlayers.length > 0 ? Math.max(confidence, 0.25) : confidence,
   };
 }
 

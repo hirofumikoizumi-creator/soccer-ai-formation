@@ -18,7 +18,7 @@ export interface AnalysisImage {
 
 async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<PickedImage> {
   const maxDimension = Math.max(asset.width || 0, asset.height || 0);
-  const targetMaxDimension = 3200;
+  const targetMaxDimension = 2800;
   const resize =
     maxDimension > targetMaxDimension
       ? {
@@ -35,8 +35,8 @@ async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<
       resize ? [{ resize }] : [],
       {
         base64: true,
-        compress: 0.92,
-        format: ImageManipulator.SaveFormat.JPEG,
+        compress: 1,
+        format: ImageManipulator.SaveFormat.PNG,
       }
     );
 
@@ -52,7 +52,7 @@ async function assetToPickedImage(asset: ImagePicker.ImagePickerAsset): Promise<
 
     const pickedImage = {
       base64,
-      mimeType: 'image/jpeg',
+      mimeType: 'image/png',
       uri: manipulated.uri,
     };
 
@@ -102,6 +102,14 @@ async function createAnalysisImages(
       enabled: width > height * 1.25,
     },
     {
+      label: 'web-pitch-tight',
+      originX: Math.round(width * 0.1),
+      originY: Math.round(height * 0.2),
+      width: Math.round(width * 0.55),
+      height: Math.round(height * 0.66),
+      enabled: width > height * 1.25,
+    },
+    {
       label: 'left-main-area',
       originX: 0,
       originY: 0,
@@ -110,11 +118,43 @@ async function createAnalysisImages(
       enabled: width > height * 1.15,
     },
     {
+      label: 'left-main-tight',
+      originX: 0,
+      originY: Math.round(height * 0.06),
+      width: Math.round(width * 0.68),
+      height: Math.round(height * 0.86),
+      enabled: width > height * 1.15,
+    },
+    {
       label: 'center-pitch-zoom',
       originX: Math.round(width * 0.08),
       originY: Math.round(height * 0.08),
       width: Math.round(width * 0.84),
       height: Math.round(height * 0.84),
+      enabled: true,
+    },
+    {
+      label: 'top-names-zoom',
+      originX: 0,
+      originY: 0,
+      width,
+      height: Math.round(height * 0.38),
+      enabled: true,
+    },
+    {
+      label: 'middle-names-zoom',
+      originX: 0,
+      originY: Math.round(height * 0.28),
+      width,
+      height: Math.round(height * 0.44),
+      enabled: true,
+    },
+    {
+      label: 'bottom-names-zoom',
+      originX: 0,
+      originY: Math.round(height * 0.62),
+      width,
+      height: Math.round(height * 0.38),
       enabled: true,
     },
     {
@@ -144,7 +184,7 @@ async function createAnalysisImages(
   ];
 
   for (const spec of cropSpecs) {
-    if (!spec.enabled || variants.length >= 5) {
+    if (!spec.enabled || variants.length >= 8) {
       continue;
     }
 
@@ -162,21 +202,21 @@ async function createAnalysisImages(
           },
           {
             resize: {
-              width: 2600,
+              width: 3200,
             },
           },
         ],
         {
           base64: true,
-          compress: 0.96,
-          format: ImageManipulator.SaveFormat.JPEG,
+          compress: 1,
+          format: ImageManipulator.SaveFormat.PNG,
         }
       );
 
       if (cropped.base64) {
         variants.push({
           base64: cropped.base64,
-          mimeType: 'image/jpeg',
+          mimeType: 'image/png',
           label: spec.label,
         });
       }
