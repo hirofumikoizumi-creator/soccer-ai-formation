@@ -89,13 +89,19 @@ export default function HomeScreen({
         image.base64,
         image.mimeType
       );
+      pendingFormation.analysisImages = image.analysisImages;
       if (teamType === 'home') {
         setHomeFormation(pendingFormation);
       } else {
         setAwayFormation(pendingFormation);
       }
 
-      const analysis = await analyzeFormationImage(image.base64, teamType, image.mimeType);
+      const analysis = await analyzeFormationImage(
+        image.base64,
+        teamType,
+        image.mimeType,
+        image.analysisImages
+      );
 
       const formationData: FormationData = {
         teamName: analysis.teamName,
@@ -104,6 +110,7 @@ export default function HomeScreen({
         imageUri: image.uri,
         imageBase64: image.base64,
         mimeType: image.mimeType,
+        analysisImages: image.analysisImages,
       };
 
       if (teamType === 'home') {
@@ -137,13 +144,19 @@ export default function HomeScreen({
         image.base64,
         image.mimeType
       );
+      pendingFormation.analysisImages = image.analysisImages;
       if (teamType === 'home') {
         setHomeFormation(pendingFormation);
       } else {
         setAwayFormation(pendingFormation);
       }
 
-      const analysis = await analyzeFormationImage(image.base64, teamType, image.mimeType);
+      const analysis = await analyzeFormationImage(
+        image.base64,
+        teamType,
+        image.mimeType,
+        image.analysisImages
+      );
 
       const formationData: FormationData = {
         teamName: analysis.teamName,
@@ -152,6 +165,7 @@ export default function HomeScreen({
         imageUri: image.uri,
         imageBase64: image.base64,
         mimeType: image.mimeType,
+        analysisImages: image.analysisImages,
       };
 
       if (teamType === 'home') {
@@ -213,7 +227,8 @@ export default function HomeScreen({
       const analysis = await analyzeFormationImage(
         formation.imageBase64,
         teamType,
-        formation.mimeType || 'image/jpeg'
+        formation.mimeType || 'image/jpeg',
+        formation.analysisImages
       );
       const formationData: FormationData = {
         teamName: analysis.teamName,
@@ -222,6 +237,7 @@ export default function HomeScreen({
         imageUri: formation.imageUri,
         imageBase64: formation.imageBase64,
         mimeType: formation.mimeType || 'image/jpeg',
+        analysisImages: formation.analysisImages,
       };
 
       if (teamType === 'home') {

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { AnalysisImage } from '../types';
 
 export interface FormationAnalysis {
   teamName: string;
@@ -34,6 +35,7 @@ const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/mo
 const MAX_INLINE_IMAGE_BYTES = 18 * 1024 * 1024;
 const GEMINI_TIMEOUT_MS = 60000;
 const MIN_PLAYERS_FOR_CONFIDENT_READ = 5;
+const MAX_ANALYSIS_IMAGES = 4;
 
 const FORMATION_RESPONSE_SCHEMA = {
   type: 'OBJECT',
@@ -101,6 +103,47 @@ function prepareInlineImage(imageBase64: string, mimeType: string) {
   };
 }
 
+function prepareInlineImages(
+  imageBase64: string,
+  mimeType: string,
+  analysisImages?: AnalysisImage[]
+) {
+  const sourceImages =
+    analysisImages && analysisImages.length > 0
+      ? analysisImages
+      : [{ base64: imageBase64, mimeType, label: 'full-selection' }];
+
+  const seen = new Set<string>();
+  return sourceImages
+    .slice(0, MAX_ANALYSIS_IMAGES)
+    .map((image) => ({
+      ...prepareInlineImage(image.base64, image.mimeType || mimeType),
+      label: image.label || 'analysis-image',
+    }))
+    .filter((image) => {
+      const key = `${image.label}:${image.data.slice(0, 64)}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+}
+
+function buildInlineImageParts(images: ReturnType<typeof prepareInlineImages>) {
+  return images.flatMap((image, index) => [
+    {
+      text: `解析画像${index + 1}: ${image.label}`,
+    },
+    {
+      inline_data: {
+        mime_type: image.mimeType,
+        data: image.data,
+      },
+    },
+  ]);
+}
+
 function extractJsonObject(text: string) {
   const cleaned = text
     .replace(/```json/gi, '```')
@@ -141,7 +184,7 @@ function normalizePlayers(players: unknown): string[] {
   const seen = new Set<string>();
   return players
     .map((player) => String(player).trim())
-    .map((player) => player.replace(/\s+/g, ' '))
+    .map(cleanPlayerLabel)
     .filter((player) => {
       if (!player) {
         return false;
@@ -155,17 +198,75 @@ function normalizePlayers(players: unknown): string[] {
     });
 }
 
+function cleanPlayerLabel(player: string) {
+  const match = player.match(/^([A-Z]{1,4})\s*[:：]\s*(.+)$/i);
+  const position = match?.[1]?.toUpperCase();
+  const name = (match?.[2] || player)
+    .replace(/[（(][^（）()]{1,24}[）)]/g, '')
+    .replace(/[「」『』"'“”]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!name || /^[0-9０-９]+$/.test(name)) {
+    return '';
+  }
+
+  return position ? `${position}: ${name}` : name;
+}
+
+function normalizeFormationLabel(formation: unknown) {
+  const text = String(formation || '').trim();
+  const match = text.match(/([3-5])\s*[-ー－]\s*([1-5])\s*[-ー－]\s*([1-5])(?:\s*[-ー－]\s*([1-5]))?/);
+  if (!match) {
+    return text || '未解析';
+  }
+
+  return [match[1], match[2], match[3], match[4]].filter(Boolean).join('-');
+}
+
+function inferFormationFromPlayers(players: string[]) {
+  const lines = {
+    defenders: 0,
+    midfielders: 0,
+    forwards: 0,
+  };
+
+  parsePositionedPlayers(players).forEach((player) => {
+    if (/^(CB|DF|RB|LB|RWB|LWB|SB)$/i.test(player.position)) {
+      lines.defenders += 1;
+      return;
+    }
+    if (/^(DMF|CMF|OMF|MF|RMF|LMF|AMF)$/i.test(player.position)) {
+      lines.midfielders += 1;
+      return;
+    }
+    if (/^(CF|ST|FW|LWG|RWG|LW|RW)$/i.test(player.position)) {
+      lines.forwards += 1;
+    }
+  });
+
+  if (lines.defenders > 0 && lines.midfielders > 0 && lines.forwards > 0) {
+    return `${lines.defenders}-${lines.midfielders}-${lines.forwards}`;
+  }
+
+  return '';
+}
+
 function normalizeFormationAnalysis(
   analysis: any,
   teamType: 'home' | 'away'
 ): FormationAnalysis {
+  const players = normalizePlayers(analysis.players);
+  const formation = normalizeFormationLabel(analysis.formation);
+  const inferredFormation = formation === '未解析' ? inferFormationFromPlayers(players) : '';
+
   return {
     teamName: ensureJapaneseText(
       analysis.teamName,
       teamType === 'home' ? 'ホームチーム' : 'アウェイチーム'
     ),
-    formation: ensureJapaneseText(analysis.formation, '未解析'),
-    players: normalizePlayers(analysis.players),
+    formation: inferredFormation || formation,
+    players,
     confidence: typeof analysis.confidence === 'number' ? analysis.confidence : 0.5,
   };
 }
@@ -382,11 +483,12 @@ function estimateFallbackProbabilities(homeFormation: string, awayFormation: str
 export async function analyzeFormationImage(
   imageBase64: string,
   teamType: 'home' | 'away',
-  mimeType = 'image/jpeg'
+  mimeType = 'image/jpeg',
+  analysisImages?: AnalysisImage[]
 ): Promise<FormationAnalysis> {
   try {
     assertGeminiApiKey();
-    const inlineImage = prepareInlineImage(imageBase64, mimeType);
+    const inlineImages = prepareInlineImages(imageBase64, mimeType, analysisImages);
 
     const prompt = `あなたはサッカーのフォーメーション画像、テレビ中継のスタメン表示、スマホのスクリーンショットを読む専門家です。
 アップロードされた${teamType === 'home' ? 'ホーム' : 'アウェイ'}チームの画像を解析してください。
@@ -423,6 +525,13 @@ export async function analyzeFormationImage(
 画像がサッカーのフォーメーション図ではないと明確に判断できる場合のみ、formationを"未解析"、playersを空配列にしてください。
 confidenceは0から1で、読み取り確信度を返してください。
 
+複数の解析画像がある場合:
+- 解析画像1はユーザーが選択した全体画像です。配置、チーム名、ピッチの向きを判断してください。
+- 解析画像2以降はOCR用の拡大クロップです。小さな白文字、選手名ラベル、LINEUP11形式の名前読み取りに使ってください。
+- ブラウザのタブ、検索バー、右サイドバー、記事本文、アーカイブ、広告、ロゴは無視してください。
+- 括弧内のクラブ名はplayersに含めないでください。例: "ガクポ (リヴァプール)" は "LWG: ガクポ" としてください。
+- LINEUP11のようなピッチ画像では、ユニフォームの位置からGK/DF/MF/FWのラインを数え、GKを除いた10人でフォーメーションを決めてください。
+
 Markdown、説明文、コードブロックは絶対に含めないでください。`;
 
     const response = await postGeminiGenerateContent({
@@ -432,12 +541,7 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
             {
               text: prompt,
             },
-            {
-              inline_data: {
-                mime_type: inlineImage.mimeType,
-                data: inlineImage.data,
-              },
-            },
+            ...buildInlineImageParts(inlineImages),
           ],
         },
       ],
@@ -464,7 +568,8 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
             imageBase64,
             teamType,
             mimeType,
-            normalizedAnalysis.formation
+            normalizedAnalysis.formation,
+            analysisImages
           );
           const mergedPlayers = mergePlayerLists(normalizedAnalysis.players, playerOcr.players);
 
@@ -496,6 +601,8 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
 - フォーメーション名が明記されていなくても、GKを除く10人のライン人数から必ず最も近い形を推定してください。
 - 選手名は読める範囲だけでよいので、姓・短縮名・ローマ字・カタカナなど最大11名まで返してください。
 - players配列は可能なら "GK: 名前", "CB: 名前", "DMF: 名前", "CF: 名前" のようにポジション付きで返してください。
+- 複数の解析画像がある場合は、全体画像で配置を確認し、拡大クロップで選手名を読み取ってください。
+- Webページのスクリーンショットでは、ピッチ画像以外の本文やサイドバーを無視してください。
 - それでも読めない場合のみ、formationを"未解析"、playersを空配列にしてください。
 
 JSONのみで返してください。`;
@@ -505,12 +612,7 @@ JSONのみで返してください。`;
         {
           parts: [
             { text: retryPrompt },
-            {
-              inline_data: {
-                mime_type: inlineImage.mimeType,
-                data: inlineImage.data,
-              },
-            },
+            ...buildInlineImageParts(inlineImages),
           ],
         },
       ],
@@ -535,7 +637,8 @@ JSONのみで返してください。`;
           imageBase64,
           teamType,
           mimeType,
-          retryAnalysis.formation
+          retryAnalysis.formation,
+          analysisImages
         );
         return {
           ...retryAnalysis,
@@ -562,9 +665,10 @@ async function readPlayersFromImage(
   imageBase64: string,
   teamType: 'home' | 'away',
   mimeType = 'image/jpeg',
-  knownFormation = '未解析'
+  knownFormation = '未解析',
+  analysisImages?: AnalysisImage[]
 ) {
-  const inlineImage = prepareInlineImage(imageBase64, mimeType);
+  const inlineImages = prepareInlineImages(imageBase64, mimeType, analysisImages);
   const prompt = `あなたはサッカー画像の選手名OCR専門家です。
 この画像から、${teamType === 'home' ? 'ホーム' : 'アウェイ'}チームの選手名だけをできる限り読み取ってください。
 フォーメーション推定よりも、選手名ラベル・スタメン表・ピッチ上の小さな文字の読み取りを最優先してください。
@@ -584,6 +688,8 @@ async function readPlayersFromImage(
 - 配置が分かる場合は "GK: 名前", "CB: 名前", "SB: 名前", "DMF: 名前", "OMF: 名前", "CF: 名前" のようにポジション付きで返してください。
 - 配置が分からない場合は名前だけでも構いません。
 - 選手名を推測で捏造しないでください。読めた名前だけ返してください。
+- 複数の解析画像がある場合は、拡大クロップをOCRの主材料にし、全体画像で配置と上下左右を確認してください。
+- LINEUP11やWeb記事のスクリーンショットでは、ピッチ内の白文字ラベルを優先し、括弧内のクラブ名、記事本文、右サイドバー、ブラウザUIは除外してください。
 
 JSONのみで返してください。`;
 
@@ -592,12 +698,7 @@ JSONのみで返してください。`;
       {
         parts: [
           { text: prompt },
-          {
-            inline_data: {
-              mime_type: inlineImage.mimeType,
-              data: inlineImage.data,
-            },
-          },
+          ...buildInlineImageParts(inlineImages),
         ],
       },
     ],

@@ -107,6 +107,7 @@ export default function ConfirmationScreen({
   const [homeImageUri, setHomeImageUri] = useState(homeFormation.imageUri);
   const [homeImageBase64, setHomeImageBase64] = useState(homeFormation.imageBase64);
   const [homeMimeType, setHomeMimeType] = useState(homeFormation.mimeType || 'image/jpeg');
+  const [homeAnalysisImages, setHomeAnalysisImages] = useState(homeFormation.analysisImages);
 
   const [awayTeam, setAwayTeam] = useState(awayFormation.teamName);
   const [awayFormationStr, setAwayFormationStr] = useState(awayFormation.formation);
@@ -114,6 +115,7 @@ export default function ConfirmationScreen({
   const [awayImageUri, setAwayImageUri] = useState(awayFormation.imageUri);
   const [awayImageBase64, setAwayImageBase64] = useState(awayFormation.imageBase64);
   const [awayMimeType, setAwayMimeType] = useState(awayFormation.mimeType || 'image/jpeg');
+  const [awayAnalysisImages, setAwayAnalysisImages] = useState(awayFormation.analysisImages);
 
   const [loading, setLoading] = useState(false);
   const [reanalyzing, setReanalyzing] = useState<'home' | 'away' | null>(null);
@@ -149,13 +151,20 @@ export default function ConfirmationScreen({
         setHomeImageUri(image.uri);
         setHomeImageBase64(image.base64);
         setHomeMimeType(image.mimeType);
+        setHomeAnalysisImages(image.analysisImages);
       } else {
         setAwayImageUri(image.uri);
         setAwayImageBase64(image.base64);
         setAwayMimeType(image.mimeType);
+        setAwayAnalysisImages(image.analysisImages);
       }
 
-      const analysis = await analyzeFormationImage(image.base64, teamType, image.mimeType);
+      const analysis = await analyzeFormationImage(
+        image.base64,
+        teamType,
+        image.mimeType,
+        image.analysisImages
+      );
       if (teamType === 'home') {
         setHomeTeam(analysis.teamName);
         setHomeFormationStr(analysis.formation);
@@ -194,6 +203,7 @@ export default function ConfirmationScreen({
         imageUri: homeImageUri,
         imageBase64: homeImageBase64,
         mimeType: homeMimeType,
+        analysisImages: homeAnalysisImages,
         players: createPositionedPlayers(homePlayers, homeFormationStr),
       };
 
@@ -204,6 +214,7 @@ export default function ConfirmationScreen({
         imageUri: awayImageUri,
         imageBase64: awayImageBase64,
         mimeType: awayMimeType,
+        analysisImages: awayAnalysisImages,
         players: createPositionedPlayers(awayPlayers, awayFormationStr),
       };
 

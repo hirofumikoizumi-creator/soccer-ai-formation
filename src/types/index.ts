@@ -5,6 +5,13 @@ export interface FormationData {
   imageUri?: string;
   imageBase64?: string;
   mimeType?: string;
+  analysisImages?: AnalysisImage[];
+}
+
+export interface AnalysisImage {
+  base64: string;
+  mimeType: string;
+  label: string;
 }
 
 export interface AnalysisState {
