@@ -1,5 +1,13 @@
 import React, { useState } from 'react';
-import { View, ActivityIndicator, StyleSheet, Alert, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  ActivityIndicator,
+  StyleSheet,
+  Alert,
+  Platform,
+  TouchableOpacity,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import {
   getTrackingPermissionsAsync,
@@ -22,6 +30,8 @@ import {
   saveAnalysisUsage,
 } from './src/utils/analysisUsage';
 
+type TrackingPermissionState = 'checking' | 'needsPrompt' | 'ready';
+
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<AppScreen>('home');
   const [homeFormation, setHomeFormation] = useState<FormationData | null>(null);
@@ -32,7 +42,8 @@ export default function App() {
   const [showRewardedAd, setShowRewardedAd] = useState(false);
   const [rewardPurpose, setRewardPurpose] = useState<'prediction' | 'imageRead'>('prediction');
   const [usage, setUsage] = useState<AnalysisUsage>(createEmptyUsage());
-  const [trackingPermissionReady, setTrackingPermissionReady] = useState(false);
+  const [trackingPermissionState, setTrackingPermissionState] =
+    useState<TrackingPermissionState>('checking');
 
   React.useEffect(() => {
     loadAnalysisUsage().then(setUsage);
@@ -41,30 +52,47 @@ export default function App() {
   React.useEffect(() => {
     let mounted = true;
 
-    const requestTrackingPermission = async () => {
+    const checkTrackingPermission = async () => {
       try {
-        if (Platform.OS === 'ios') {
-          const permission = await getTrackingPermissionsAsync();
-
-          if (permission.status === 'undetermined' && permission.canAskAgain) {
-            await requestTrackingPermissionsAsync();
-          }
+        if (Platform.OS !== 'ios') {
+          setTrackingPermissionState('ready');
+          return;
         }
+
+        const permission = await getTrackingPermissionsAsync();
+
+        if (permission.status === 'undetermined' && permission.canAskAgain) {
+          setTrackingPermissionState('needsPrompt');
+          return;
+        }
+
+        setTrackingPermissionState('ready');
       } catch (error) {
-        console.warn('Unable to request tracking permission', error);
-      } finally {
+        console.warn('Unable to check tracking permission', error);
         if (mounted) {
-          setTrackingPermissionReady(true);
+          setTrackingPermissionState('ready');
         }
       }
     };
 
-    requestTrackingPermission();
+    checkTrackingPermission();
 
     return () => {
       mounted = false;
     };
   }, []);
+
+  const trackingPermissionReady = trackingPermissionState === 'ready';
+
+  const handleTrackingPromptContinue = async () => {
+    try {
+      await requestTrackingPermissionsAsync();
+    } catch (error) {
+      console.warn('Unable to request tracking permission', error);
+    } finally {
+      setTrackingPermissionState('ready');
+    }
+  };
 
   const persistUsage = async (nextUsage: AnalysisUsage) => {
     setUsage(nextUsage);
@@ -227,6 +255,38 @@ export default function App() {
     setAwayFormation(null);
   };
 
+  if (trackingPermissionState === 'checking') {
+    return (
+      <View style={styles.permissionContainer}>
+        <StatusBar style="light" />
+        <ActivityIndicator size="large" color={colors.goldBright} />
+      </View>
+    );
+  }
+
+  if (trackingPermissionState === 'needsPrompt') {
+    return (
+      <View style={styles.permissionContainer}>
+        <StatusBar style="light" />
+        <View style={styles.permissionPanel}>
+          <Text style={styles.permissionTitle}>広告表示に関する確認</Text>
+          <Text style={styles.permissionText}>
+            本アプリでは、広告配信、広告効果測定、不正防止のためにデバイス識別子を使用する場合があります。
+          </Text>
+          <Text style={styles.permissionText}>
+            次の画面でトラッキング許可の確認が表示されます。許可しない場合でも、アプリは引き続き利用できます。
+          </Text>
+          <TouchableOpacity
+            style={styles.permissionButton}
+            onPress={handleTrackingPromptContinue}
+          >
+            <Text style={styles.permissionButtonText}>続行</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -295,6 +355,47 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  permissionContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  permissionPanel: {
+    width: '100%',
+    maxWidth: 460,
+    padding: 22,
+    borderRadius: 14,
+    backgroundColor: colors.panelElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  permissionTitle: {
+    color: colors.goldBright,
+    fontSize: 22,
+    fontWeight: '900',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  permissionText: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 22,
+    marginBottom: 10,
+  },
+  permissionButton: {
+    marginTop: 12,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: colors.gold,
+  },
+  permissionButtonText: {
+    color: colors.background,
+    fontSize: 16,
+    fontWeight: '900',
   },
   overlay: {
     position: 'absolute',
