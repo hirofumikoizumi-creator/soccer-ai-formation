@@ -338,16 +338,6 @@ export default function HomeScreen({
             フォーメーションや選手名を読み取れていません。範囲指定して再読み取りするか、次の画面で手入力してください。
           </Text>
         )}
-        {formation.debugLog && formation.debugLog.length > 0 && (
-          <View style={styles.debugPanel}>
-            <Text style={styles.debugTitle}>解析ログ</Text>
-            {formation.debugLog.slice(-10).map((line, index) => (
-              <Text key={`${teamType}-debug-${index}-${line}`} style={styles.debugText}>
-                {line}
-              </Text>
-            ))}
-          </View>
-        )}
         {formation.imageUri && (
           <TouchableOpacity
             style={styles.changeButton}
@@ -663,25 +653,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     marginBottom: 12,
-  },
-  debugPanel: {
-    marginBottom: 12,
-    padding: 10,
-    borderRadius: 8,
-    backgroundColor: 'rgba(3, 13, 32, 0.78)',
-    borderWidth: 1,
-    borderColor: colors.borderSoft,
-  },
-  debugTitle: {
-    color: colors.goldBright,
-    fontSize: 12,
-    fontWeight: '900',
-    marginBottom: 6,
-  },
-  debugText: {
-    color: colors.muted,
-    fontSize: 10,
-    lineHeight: 15,
   },
   changeButton: {
     backgroundColor: 'rgba(3, 13, 32, 0.72)',
