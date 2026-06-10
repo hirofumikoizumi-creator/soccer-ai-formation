@@ -6,7 +6,6 @@ export interface FormationData {
   imageBase64?: string;
   mimeType?: string;
   analysisImages?: AnalysisImage[];
-  teamHint?: string;
   debugLog?: string[];
 }
 

@@ -39,92 +39,6 @@ const GEMINI_TIMEOUT_MS = 60000;
 const MAX_ANALYSIS_IMAGES = 1;
 type AnalysisDebugLogger = (message: string) => void;
 
-const TEAM_PLAYER_DICTIONARIES: Record<string, string[]> = {
-  'オランダ代表': [
-    'フェルブルッヘン',
-    'ファン・ダイク',
-    'デフライ',
-    'ダンフリース',
-    'アケ',
-    'ラインデルス',
-    'スハウテン',
-    'フェールマン',
-    'デパイ',
-    'ガクポ',
-    'シャビ・シモンズ',
-    'フリンポン',
-    'マレン',
-    'ベグホルスト',
-    'ブロビー',
-  ],
-  '日本代表': [
-    '鈴木彩艶',
-    '谷口彰悟',
-    '板倉滉',
-    '町田浩樹',
-    '冨安健洋',
-    '遠藤航',
-    '守田英正',
-    '田中碧',
-    '久保建英',
-    '堂安律',
-    '三笘薫',
-    '南野拓実',
-    '伊東純也',
-    '上田綺世',
-    '前田大然',
-  ],
-  'フランス代表': [
-    'メニャン',
-    'クンデ',
-    'サリバ',
-    'ウパメカノ',
-    'テオ・エルナンデス',
-    'カンテ',
-    'チュアメニ',
-    'ラビオ',
-    'グリーズマン',
-    'エムバペ',
-    'デンベレ',
-    'ジルー',
-  ],
-  'イングランド代表': [
-    'ピックフォード',
-    'ウォーカー',
-    'ストーンズ',
-    'マグワイア',
-    'ショー',
-    'ライス',
-    'ベリンガム',
-    'フォーデン',
-    'サカ',
-    'ケイン',
-    'パーマー',
-  ],
-  'スペイン代表': [
-    'ウナイ・シモン',
-    'カルバハル',
-    'ラポルト',
-    'ル・ノルマン',
-    'ククレジャ',
-    'ロドリ',
-    'ペドリ',
-    'ファビアン',
-    'ヤマル',
-    'モラタ',
-    'ニコ・ウィリアムズ',
-  ],
-};
-
-const ALL_KNOWN_PLAYERS = Array.from(new Set(Object.values(TEAM_PLAYER_DICTIONARIES).flat()));
-const TEAM_DEFAULT_FORMATIONS: Record<string, string> = {
-  'オランダ代表': '4-3-3',
-  '日本代表': '3-4-2-1',
-  'フランス代表': '4-2-3-1',
-  'イングランド代表': '4-2-3-1',
-  'スペイン代表': '4-3-3',
-};
-
 const FORMATION_RESPONSE_SCHEMA = {
   type: 'OBJECT',
   properties: {
@@ -264,39 +178,6 @@ function buildInlineImageParts(images: ReturnType<typeof prepareInlineImages>) {
   ]);
 }
 
-function buildDictionaryPrompt(teamHint?: string) {
-  if (!teamHint) {
-    return '';
-  }
-
-  const players = TEAM_PLAYER_DICTIONARIES[teamHint];
-  if (!players || players.length === 0) {
-    return `\n対象チーム候補: ${teamHint}\n`;
-  }
-
-  return `\n対象チーム候補: ${teamHint}
-選手名候補辞書:
-${players.map((player, index) => `${index + 1}. ${player}`).join('\n')}
-OCRで一部だけ読めた名前は、この候補辞書と照合して最も近い選手名に補正してください。ただし画像内に存在しない候補を無理に追加しないでください。
-`;
-}
-
-function getTeamHintPlayers(teamHint?: string) {
-  if (!teamHint) {
-    return [];
-  }
-
-  return TEAM_PLAYER_DICTIONARIES[teamHint] || [];
-}
-
-function getTeamHintFormation(teamHint?: string) {
-  if (!teamHint) {
-    return '';
-  }
-
-  return TEAM_DEFAULT_FORMATIONS[teamHint] || '';
-}
-
 function extractJsonObject(text: string) {
   const cleaned = text
     .replace(/```json/gi, '```')
@@ -374,68 +255,13 @@ function cleanPlayerLabel(player: string) {
     .replace(/[「」『』"'“”]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-  const name = normalizeKnownPlayerName(rawName);
+  const name = rawName;
 
   if (!name || /^[0-9０-９]+$/.test(name)) {
     return '';
   }
 
   return position ? `${position}: ${name}` : name;
-}
-
-function compactForMatch(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[・\s　.\-ー－]/g, '')
-    .replace(/[ァ-ン]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0x60));
-}
-
-function levenshteinDistance(a: string, b: string) {
-  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i]);
-  for (let j = 1; j <= b.length; j += 1) {
-    dp[0][j] = j;
-  }
-  for (let i = 1; i <= a.length; i += 1) {
-    for (let j = 1; j <= b.length; j += 1) {
-      dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,
-        dp[i][j - 1] + 1,
-        dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
-      );
-    }
-  }
-  return dp[a.length][b.length];
-}
-
-function normalizeKnownPlayerName(name: string) {
-  const cleaned = name.trim();
-  const compactName = compactForMatch(cleaned);
-  if (compactName.length < 2) {
-    return cleaned;
-  }
-
-  let bestName = cleaned;
-  let bestScore = Number.POSITIVE_INFINITY;
-
-  ALL_KNOWN_PLAYERS.forEach((knownName) => {
-    const compactKnown = compactForMatch(knownName);
-    if (!compactKnown) {
-      return;
-    }
-    if (compactKnown.includes(compactName) || compactName.includes(compactKnown)) {
-      bestName = knownName;
-      bestScore = 0;
-      return;
-    }
-    const distance = levenshteinDistance(compactName, compactKnown);
-    const threshold = compactKnown.length <= 5 ? 1 : 2;
-    if (distance <= threshold && distance < bestScore) {
-      bestName = knownName;
-      bestScore = distance;
-    }
-  });
-
-  return bestName;
 }
 
 function extractPlayerCandidatesFromTextLines(lines: unknown) {
@@ -541,7 +367,6 @@ async function readPlayersFromIndividualImages(
   mimeType: string,
   knownFormation: string,
   analysisImages?: AnalysisImage[],
-  teamHint?: string,
   debug?: AnalysisDebugLogger
 ) {
   const sourceImages =
@@ -562,7 +387,6 @@ async function readPlayersFromIndividualImages(
         mimeType,
         knownFormation,
         [image],
-        teamHint,
         debug
       );
       mergedPlayers = mergePlayerLists(mergedPlayers, result.players);
@@ -590,15 +414,12 @@ async function readRawTextCandidatesFromImages(
   imageBase64: string,
   mimeType: string,
   analysisImages?: AnalysisImage[],
-  teamHint?: string,
   debug?: AnalysisDebugLogger
 ) {
   const inlineImages = prepareInlineImages(imageBase64, mimeType, analysisImages);
   debug?.(`生OCR開始: ${inlineImages.length}画像`);
-  const dictionaryHint = buildDictionaryPrompt(teamHint);
   const prompt = `画像内の文字をOCRしてください。
 目的はサッカーのフォーメーション画像から、少しでも読める選手名を拾うことです。
-${dictionaryHint}
 
 ルール:
 - ピッチ上の白文字、選手名ラベル、スタメン表、LINEUP11画像内の名前を最優先でrawTextLinesに入れてください。
@@ -647,7 +468,6 @@ async function enrichFormationWithAllOcr(
   teamType: 'home' | 'away',
   mimeType: string,
   analysisImages?: AnalysisImage[],
-  teamHint?: string,
   debug?: AnalysisDebugLogger
 ) {
   let players = analysis.players;
@@ -662,7 +482,6 @@ async function enrichFormationWithAllOcr(
       mimeType,
       analysis.formation,
       analysisImages,
-      teamHint,
       debug
     );
     players = mergePlayerLists(players, playerOcr.players);
@@ -683,7 +502,6 @@ async function enrichFormationWithAllOcr(
         mimeType,
         analysis.formation,
         analysisImages,
-        teamHint,
         debug
       );
       players = mergePlayerLists(players, individualOcr.players);
@@ -703,7 +521,6 @@ async function enrichFormationWithAllOcr(
         imageBase64,
         mimeType,
         analysisImages,
-        teamHint,
         debug
       );
       players = mergePlayerLists(players, rawOcr.players);
@@ -716,22 +533,13 @@ async function enrichFormationWithAllOcr(
 
   const inferredFormation =
     analysis.formation === '未解析' ? inferFormationFromPlayers(players) : '';
-  const fallbackPlayers = players.length === 0 ? getTeamHintPlayers(teamHint).slice(0, 11) : [];
-  const fallbackFormation =
-    (analysis.formation === '未解析' || !analysis.formation)
-      ? getTeamHintFormation(teamHint)
-      : '';
-
-  if (fallbackPlayers.length > 0) {
-    debug?.(`画像OCRは0名。${teamHint}の候補${fallbackPlayers.length}名を表示`);
-  }
 
   return {
     ...analysis,
-    teamName: teamHint && teamName === (teamType === 'home' ? 'ホームチーム' : 'アウェイチーム') ? teamHint : teamName,
-    formation: inferredFormation || fallbackFormation || analysis.formation,
-    players: fallbackPlayers.length > 0 ? fallbackPlayers : players,
-    confidence: fallbackPlayers.length > 0 ? Math.max(confidence, 0.25) : confidence,
+    teamName,
+    formation: inferredFormation || analysis.formation,
+    players,
+    confidence,
   };
 }
 
@@ -953,7 +761,6 @@ export async function analyzeFormationImage(
   teamType: 'home' | 'away',
   mimeType = 'image/jpeg',
   analysisImages?: AnalysisImage[],
-  teamHint?: string,
   onDebug?: AnalysisDebugLogger
 ): Promise<FormationAnalysis> {
   const debugLog: string[] = [];
@@ -968,7 +775,7 @@ export async function analyzeFormationImage(
   };
 
   try {
-    debug(`解析開始: ${teamType}${teamHint ? ` / ${teamHint}` : ''}`);
+    debug(`解析開始: ${teamType} / 汎用OCR`);
     debug(`APIキー: ${getGeminiApiKey() ? 'あり' : 'なし'}`);
     assertGeminiApiKey();
     const inlineImages = prepareInlineImages(imageBase64, mimeType, analysisImages);
@@ -976,12 +783,10 @@ export async function analyzeFormationImage(
     inlineImages.forEach((image, index) => {
       debug(`画像${index + 1}: ${image.label} ${image.mimeType} 約${Math.round(estimateBase64Bytes(image.data) / 1024)}KB`);
     });
-    const dictionaryHint = buildDictionaryPrompt(teamHint);
 
     const prompt = `あなたはサッカーのフォーメーション画像、テレビ中継のスタメン表示、スマホのスクリーンショットを読む専門家です。
 アップロードされた${teamType === 'home' ? 'ホーム' : 'アウェイ'}チームの画像を解析してください。
 画像はスマートフォンのカメラ写真、テレビ画面の撮影、WebページやSNSのスクリーンショット、縦長・横長、斜め撮影、影、反射、ぼけ、低解像度を含む可能性があります。
-${dictionaryHint}
 
 最重要タスク:
 - この画像から、対象チームのフォーメーションと先発11名の選手名を読み込んでください。
@@ -1058,7 +863,6 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
         teamType,
         mimeType,
         analysisImages,
-        teamHint,
         debug
       );
       debug(`解析完了: ${enriched.players.length}名`);
@@ -1068,7 +872,6 @@ Markdown、説明文、コードブロックは絶対に含めないでくださ
 
     const retryPrompt = `同じ画像をもう一度、OCRと配置推定を優先して解析してください。
 前回はフォーメーションや選手名が十分に読み取れませんでした。
-${dictionaryHint}
 
 重要:
 - 画像の中のフォーメーション図、スタメン表、ピッチ上の選手名ラベルだけに集中してください。
@@ -1109,7 +912,6 @@ JSONのみで返してください。`;
         teamType,
         mimeType,
         analysisImages,
-        teamHint,
         debug
       );
       debug(`解析完了: ${enriched.players.length}名`);
@@ -1125,7 +927,6 @@ JSONのみで返してください。`;
       teamType,
       mimeType,
       analysisImages,
-      teamHint,
       debug
     );
     debug(`解析完了: ${enriched.players.length}名`);
@@ -1144,17 +945,14 @@ async function readPlayersFromImage(
   mimeType = 'image/jpeg',
   knownFormation = '未解析',
   analysisImages?: AnalysisImage[],
-  teamHint?: string,
   debug?: AnalysisDebugLogger
 ) {
   const inlineImages = prepareInlineImages(imageBase64, mimeType, analysisImages);
   debug?.(`選手OCR送信画像: ${inlineImages.length}枚`);
-  const dictionaryHint = buildDictionaryPrompt(teamHint);
   const prompt = `あなたはサッカー画像の選手名OCR専門家です。
 この画像から、${teamType === 'home' ? 'ホーム' : 'アウェイ'}チームの選手名だけをできる限り読み取ってください。
 フォーメーション推定よりも、選手名ラベル・スタメン表・ピッチ上の小さな文字の読み取りを最優先してください。
 この画像から対象チームの先発11名の選手名を読み込んでください。
-${dictionaryHint}
 
 前提:
 - 既知のフォーメーション候補: ${knownFormation}

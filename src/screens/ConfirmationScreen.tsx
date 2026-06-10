@@ -143,7 +143,6 @@ export default function ConfirmationScreen({
   ) => {
     try {
       const previousImageUri = teamType === 'home' ? homeImageUri : awayImageUri;
-      const teamHint = teamType === 'home' ? homeFormation.teamHint : awayFormation.teamHint;
       setReanalyzing(teamType);
       const image = source === 'library' ? await pickImage() : await takePhoto();
       if (!image) {
@@ -181,8 +180,7 @@ export default function ConfirmationScreen({
         image.base64,
         teamType,
         image.mimeType,
-        image.analysisImages,
-        teamHint
+        image.analysisImages
       );
       if (teamType === 'home') {
         setHomeTeam(analysis.teamName);
