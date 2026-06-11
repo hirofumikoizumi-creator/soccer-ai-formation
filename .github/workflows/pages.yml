@@ -29,6 +29,8 @@ jobs:
         run: |
           mkdir -p public
           cp index.html public/index.html
+          cp app-ads.txt public/app-ads.txt
+          cp .nojekyll public/.nojekyll
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
